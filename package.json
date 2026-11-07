@@ -1,0 +1,14 @@
+{
+  "name": "duoaudio",
+  "version": "0.1.0",
+  "description": "Windows audio duplication utility",
+  "main": "src/enumerate.js",
+  "scripts": {
+    "enumerate": "node src/enumerate.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "audify": "^1.10.1"
+  }
+}
