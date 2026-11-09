@@ -13,7 +13,11 @@ const CHANNELS = Object.freeze({
   DEVICES_GET: 'devices:get',
   DEVICES_REFRESH: 'devices:refresh',
   APP_GET_INITIAL_STATE: 'app:get-initial-state',
-  ROUTING_GET_STATUS: 'routing:get-status'
+  ROUTING_START: 'routing:start',
+  ROUTING_STOP: 'routing:stop',
+  ROUTING_GET_STATUS: 'routing:get-status',
+  ROUTING_STATUS_CHANGED: 'routing:status-changed',
+  TRAY_TRIGGER_START: 'tray:trigger-start'
 });
 
 const duoAudioAPI = Object.freeze({
@@ -50,11 +54,68 @@ const duoAudioAPI = Object.freeze({
   },
 
   /**
-   * Queries the current mock routing status.
+   * Initiates dual-output audio routing with specified options.
+   * @param {Object} options
+   * @param {number} options.device1Id
+   * @param {number} options.device2Id
+   * @param {number} [options.vol1]
+   * @param {number} [options.vol2]
+   * @returns {Promise<Object>}
+   */
+  startRouting: (options) => {
+    return ipcRenderer.invoke(CHANNELS.ROUTING_START, options);
+  },
+
+  /**
+   * Gracefully stops dual-output audio routing.
+   * @returns {Promise<Object>}
+   */
+  stopRouting: () => {
+    return ipcRenderer.invoke(CHANNELS.ROUTING_STOP);
+  },
+
+  /**
+   * Queries the current audio routing status.
    * @returns {Promise<Object>}
    */
   getRoutingStatus: () => {
     return ipcRenderer.invoke(CHANNELS.ROUTING_GET_STATUS);
+  },
+
+  /**
+   * Subscribes to audio routing status changes.
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
+   */
+  onRoutingStatusChanged: (callback) => {
+    if (typeof callback !== 'function') {
+      throw new TypeError('Callback must be a function');
+    }
+    const listener = (_event, status) => {
+      callback(status);
+    };
+    ipcRenderer.on(CHANNELS.ROUTING_STATUS_CHANGED, listener);
+    return () => {
+      ipcRenderer.removeListener(CHANNELS.ROUTING_STATUS_CHANGED, listener);
+    };
+  },
+
+  /**
+   * Subscribes to start triggers dispatched from the system tray.
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
+   */
+  onTrayTriggerStart: (callback) => {
+    if (typeof callback !== 'function') {
+      throw new TypeError('Callback must be a function');
+    }
+    const listener = () => {
+      callback();
+    };
+    ipcRenderer.on(CHANNELS.TRAY_TRIGGER_START, listener);
+    return () => {
+      ipcRenderer.removeListener(CHANNELS.TRAY_TRIGGER_START, listener);
+    };
   }
 });
 

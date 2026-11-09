@@ -18,12 +18,12 @@ export function TitleBar({ onOpenSettings, isSettingsOpen, onBackHome }) {
   return (
     <header className="titlebar">
       <div className="titlebar-left">
-        {/* Original DuoAudio equalizer audio bars logo matching user reference */}
-        <svg className="titlebar-icon" width="16" height="14" viewBox="0 0 16 14" fill="none" aria-hidden="true">
-          <rect x="1" y="5" width="2" height="4" rx="1" fill="#5E6BC7" />
-          <rect x="5" y="1" width="2" height="12" rx="1" fill="#5E6BC7" />
-          <rect x="9" y="3" width="2" height="8" rx="1" fill="#5E6BC7" />
-          <rect x="13" y="6" width="2" height="2" rx="1" fill="#8E99DF" />
+        {/* DuoAudio equalizer audio bars logo sampled directly from authoritative reference */}
+        <svg className="titlebar-icon" width="16" height="15" viewBox="0 0 25 24" fill="none" aria-hidden="true">
+          <rect x="0" y="7" width="4" height="10" rx="2" fill="#6371D3" />
+          <rect x="7" y="0" width="4" height="24" rx="2" fill="#6573D6" />
+          <rect x="14" y="4" width="4" height="16" rx="2" fill="#7885D9" />
+          <rect x="21" y="9" width="4" height="6" rx="2" fill="#8C95C6" />
         </svg>
         <span className="titlebar-title">DuoAudio</span>
       </div>

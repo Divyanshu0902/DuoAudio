@@ -18,17 +18,21 @@
 const path = require("path");
 const { execFile, execFileSync } = require("child_process");
 
-const SCRIPT_PATH = path.resolve(__dirname, "audio_endpoint.ps1");
+const SCRIPT_PATH = path.resolve(
+  __dirname.replace(/app\.asar(?=[\\/]|$)/, 'app.asar.unpacked'),
+  'audio_endpoint.ps1'
+);
 const POWERSHELL_TIMEOUT_MS = 5000;
 
 class EndpointMuteManager {
   /**
    * @param {Object} [options]
    * @param {boolean} [options.enabled=true] - Set false (via --no-mute) to disable automatic muting
+   * @param {string} [options.scriptPath] - Custom script path override
    */
   constructor(options = {}) {
     this.enabled = options.enabled !== false;
-    this.scriptPath = SCRIPT_PATH;
+    this.scriptPath = options.scriptPath || SCRIPT_PATH;
 
     this.targetEndpoint = null; // { id, name, isMuted, volume }
     this.originallyMuted = null;
@@ -38,18 +42,14 @@ class EndpointMuteManager {
   }
 
   /**
-   * Discovers the current Windows default playback endpoint and mutes it if unmuted.
-   * Must be called during pre-flight checks before audio capture and playback start.
-   *
-   * @returns {Promise<{ muted: boolean, originallyMuted: boolean, endpoint: Object }>}
+   * Discovers the current Windows default playback endpoint and queries its mute state.
+   * @returns {Promise<{ id: string, name: string, isMuted: boolean, volume: number }>}
    */
-  async initAndMute() {
+  async queryDefault() {
     if (!this.enabled) {
-      console.log("[MUTE] Automatic default endpoint muting disabled (--no-mute specified).\n");
-      return { muted: false, originallyMuted: false, endpoint: null };
+      return null;
     }
 
-    // Step 1: Query current default endpoint info
     let queryResult;
     try {
       queryResult = await this._runPsAsync(["query-default"]);
@@ -69,10 +69,61 @@ class EndpointMuteManager {
     };
     this.originallyMuted = queryResult.isMuted;
 
+    return this.targetEndpoint;
+  }
+
+  /**
+   * Discovers the current Windows default playback endpoint and mutes it if unmuted.
+   * Must be called during pre-flight checks before audio capture and playback start.
+   *
+   * @param {Function} [onBaseline] - Optional callback receiving baseline info before muting: (baseline) => void
+   * @returns {Promise<{ muted: boolean, originallyMuted: boolean, endpoint: Object }>}
+   */
+  async initAndMute(onBaseline) {
+    if (!this.enabled) {
+      console.log("[MUTE] Automatic default endpoint muting disabled (--no-mute specified).\n");
+      return { muted: false, originallyMuted: false, endpoint: null };
+    }
+
+    // Step 1: Query current default endpoint info if not already queried
+    if (!this.targetEndpoint) {
+      await this.queryDefault();
+    }
+
     console.log(`[MUTE] Active Windows default playback endpoint:`);
     console.log(`       Name  : "${this.targetEndpoint.name}"`);
     console.log(`       ID    : ${this.targetEndpoint.id}`);
     console.log(`       State : ${this.originallyMuted ? "MUTED" : "UNMUTED"}`);
+
+    // Report baseline if callback provided (before muting occurs!)
+    if (typeof onBaseline === "function") {
+      try {
+        onBaseline({
+          endpointId: this.targetEndpoint.id,
+          endpointName: this.targetEndpoint.name,
+          originallyMuted: this.originallyMuted,
+          willMute: !this.originallyMuted
+        });
+      } catch (e) {
+        console.error("[MUTE] Baseline callback error:", e.message);
+      }
+    }
+
+    return this.muteTarget();
+  }
+
+  /**
+   * Mutes the target default endpoint that was previously queried via queryDefault().
+   * @returns {Promise<{ muted: boolean, originallyMuted: boolean, endpoint: Object }>}
+   */
+  async muteTarget() {
+    if (!this.enabled) {
+      return { muted: false, originallyMuted: false, endpoint: null };
+    }
+
+    if (!this.targetEndpoint) {
+      throw new Error("No target endpoint queried before calling muteTarget()");
+    }
 
     // Step 2: Evaluate pre-flight baseline
     if (this.originallyMuted === true) {
@@ -103,15 +154,15 @@ class EndpointMuteManager {
    * Asynchronous idempotent restoration for graceful shutdown (SIGINT, SIGTERM, normal exit).
    * Restores the exact endpoint that was muted at startup.
    *
-   * @returns {Promise<{ restored: boolean, reason?: string }>}
+   * @returns {Promise<{ restored: boolean, status: string, endpointId?: string, error?: string, reason?: string, skipped?: boolean }>}
    */
   async restore() {
     if (!this.enabled) {
-      return { restored: false, reason: "Mute manager disabled" };
+      return { restored: false, status: "NOT_REQUIRED", reason: "Mute manager disabled" };
     }
 
     if (this.isRestored) {
-      return { restored: false, skipped: true, reason: "Already restored" };
+      return { restored: false, skipped: true, status: "SKIPPED", reason: "Already restored", endpointId: this.targetEndpoint?.id };
     }
 
     if (this.restorationPromise) {
@@ -124,7 +175,7 @@ class EndpointMuteManager {
       if (this.originallyMuted === true && this.targetEndpoint) {
         console.log(`[MUTE] Preserved original muted state for "${this.targetEndpoint.name}".`);
       }
-      return { restored: false, reason: "Preserved original pre-session mute state" };
+      return { restored: false, status: "NOT_REQUIRED", reason: "Preserved original pre-session mute state", endpointId: this.targetEndpoint?.id };
     }
 
     this.restorationPromise = (async () => {
@@ -135,21 +186,21 @@ class EndpointMuteManager {
           console.log(`[MUTE] Restored "${this.targetEndpoint.name}" to unmuted state.`);
           this.isRestored = true;
           this.isMutedByDuoAudio = false;
-          return { restored: true };
+          return { restored: true, status: "RESTORED", endpointId: this.targetEndpoint.id };
         } else {
           // Check for disconnected device (0x80070490)
           if ((res.error || "").includes("0x80070490") || (res.error || "").includes("not found")) {
             console.warn(`[MUTE NOTICE] Muted endpoint was disconnected; restoration skipped safely.`);
             this.isRestored = true;
             this.isMutedByDuoAudio = false;
-            return { restored: false, reason: "Endpoint disconnected" };
+            return { restored: false, status: "SKIPPED", reason: "Endpoint disconnected", endpointId: this.targetEndpoint.id };
           }
           console.error(`[MUTE ERROR] Failed to unmute "${this.targetEndpoint.name}":`, res.error);
-          return { restored: false, error: res.error };
+          return { restored: false, status: "FAILED", error: res.error, endpointId: this.targetEndpoint.id };
         }
       } catch (err) {
         console.error(`[MUTE ERROR] PowerShell restoration error:`, err.message);
-        return { restored: false, error: err.message };
+        return { restored: false, status: "FAILED", error: err.message, endpointId: this.targetEndpoint.id };
       }
     })();
 
@@ -241,6 +292,36 @@ class EndpointMuteManager {
     });
 
     return (stdout || "").trim();
+  }
+
+  /**
+   * Emergency unmuting helper for a specific endpoint ID by invoking PowerShell.
+   * Can be safely called from any process (including Electron main process).
+   * @param {string} endpointId - Direct Windows endpoint ID GUID
+   * @returns {Promise<{ restored: boolean, error?: string, reason?: string }>}
+   */
+  static async restoreEndpointById(endpointId) {
+    if (!endpointId || typeof endpointId !== "string") {
+      return { restored: false, status: "FAILED", reason: "No valid endpointId provided", error: "No valid endpointId provided" };
+    }
+    const tempManager = new EndpointMuteManager();
+    tempManager.targetEndpoint = { id: endpointId, name: endpointId };
+    tempManager.isMutedByDuoAudio = true;
+    tempManager.originallyMuted = false;
+    return tempManager.restore();
+  }
+
+  /**
+   * Synchronous emergency unmuting helper for a specific endpoint ID.
+   * @param {string} endpointId - Direct Windows endpoint ID GUID
+   */
+  static restoreEndpointByIdSync(endpointId) {
+    if (!endpointId || typeof endpointId !== "string") return;
+    const tempManager = new EndpointMuteManager();
+    tempManager.targetEndpoint = { id: endpointId, name: endpointId };
+    tempManager.isMutedByDuoAudio = true;
+    tempManager.originallyMuted = false;
+    tempManager.restoreSync();
   }
 }
 

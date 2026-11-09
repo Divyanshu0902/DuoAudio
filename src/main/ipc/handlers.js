@@ -7,8 +7,9 @@
  */
 
 const { ipcMain } = require('electron');
-const { IPC_CHANNELS } = require('../../shared/ipc-contracts');
+const { IPC_CHANNELS, isValidRoutingStartPayload } = require('../../shared/ipc-contracts');
 const { enumeratePlaybackDevices } = require('../device-service');
+const { audioService } = require('../audio-service');
 
 /**
  * Registers all allowlisted IPC handlers for the main window.
@@ -19,6 +20,17 @@ function registerIpcHandlers(mainWindow) {
   const isSenderValid = (event) => {
     return event.senderFrame === mainWindow.webContents.mainFrame;
   };
+
+  // Forward audioService status updates to renderer
+  const unsubscribeStatus = audioService.onStatusChanged((status) => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_CHANNELS.ROUTING_STATUS_CHANGED, status);
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    unsubscribeStatus();
+  });
 
   // Window Minimize: Hides window to tray
   ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, (event) => {
@@ -62,12 +74,33 @@ function registerIpcHandlers(mainWindow) {
     };
   });
 
-  // Routing Status Query (Start Sharing remains disabled in Phase 5B)
+  // Routing Status Query (Phase 5C.2)
   ipcMain.handle(IPC_CHANNELS.ROUTING_GET_STATUS, (event) => {
-    return {
-      status: 'READY',
-      isRouting: false
-    };
+    if (!isSenderValid(event)) {
+      return { state: 'IDLE', isRouting: false };
+    }
+    return audioService.getRoutingStatus();
+  });
+
+  // Audio Routing Start (Phase 5C.2)
+  ipcMain.handle(IPC_CHANNELS.ROUTING_START, async (event, options) => {
+    if (!isSenderValid(event)) {
+      console.warn('[SECURITY] Rejected ROUTING_START from non-main frame');
+      return { success: false, state: 'ERROR', error: 'Unauthorized IPC origin' };
+    }
+    if (!isValidRoutingStartPayload(options)) {
+      return { success: false, state: 'ERROR', error: 'Invalid routing start payload' };
+    }
+    return audioService.startRouting(options);
+  });
+
+  // Audio Routing Stop (Phase 5C.2)
+  ipcMain.handle(IPC_CHANNELS.ROUTING_STOP, async (event) => {
+    if (!isSenderValid(event)) {
+      console.warn('[SECURITY] Rejected ROUTING_STOP from non-main frame');
+      return { success: false, state: 'ERROR', error: 'Unauthorized IPC origin' };
+    }
+    return audioService.stopRouting();
   });
 }
 

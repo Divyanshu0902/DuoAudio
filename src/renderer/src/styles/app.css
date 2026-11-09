@@ -424,6 +424,15 @@
   background-color: var(--accent-primary-hover);
 }
 
+.btn-start-sharing.btn-stop-sharing {
+  background-color: #3C4258;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn-start-sharing.btn-stop-sharing:hover:not(:disabled) {
+  background-color: #4B526D;
+}
+
 .btn-start-sharing:disabled {
   opacity: 0.85;
   cursor: not-allowed;

@@ -9,6 +9,8 @@
 
 const { execFile, execFileSync } = require('child_process');
 const path = require('path');
+const { resolveSystemNode } = require('./node-resolver');
+const { getUnpackedPath } = require('./resource-paths');
 
 /**
  * Normalizes a raw RtAudio device descriptor into an explicit, sanitized object.
@@ -59,8 +61,19 @@ function filterPlaybackDevices(rawDevices) {
  */
 function enumeratePlaybackDevices() {
   return new Promise((resolve) => {
-    const workerPath = path.join(__dirname, 'enumerate-worker.js');
-    execFile('node', [workerPath], { timeout: 5000 }, (err, stdout, stderr) => {
+    const workerPath = getUnpackedPath('src/main/enumerate-worker.js');
+    const nodeRes = resolveSystemNode();
+    if (!nodeRes.success || !nodeRes.nodePath) {
+      console.error('[DEVICE-SERVICE] Device enumeration failed: Node.js runtime resolution failed:', nodeRes.error);
+      return resolve({
+        success: false,
+        devices: [],
+        error: nodeRes.error || 'Failed to locate compatible Node.js runtime for device enumeration.'
+      });
+    }
+
+    const nodeExe = nodeRes.nodePath;
+    execFile(nodeExe, [workerPath], { timeout: 5000, cwd: path.dirname(workerPath) }, (err, stdout, stderr) => {
       if (err) {
         console.error('[DEVICE-SERVICE] Device enumeration failed:', err.message, stderr);
         return resolve({
@@ -96,9 +109,19 @@ function enumeratePlaybackDevices() {
  * @returns {{ success: boolean, devices: Array<Object>, error: string|null }}
  */
 function enumeratePlaybackDevicesSync() {
-  const workerPath = path.join(__dirname, 'enumerate-worker.js');
+  const workerPath = getUnpackedPath('src/main/enumerate-worker.js');
+  const nodeRes = resolveSystemNode();
+  if (!nodeRes.success || !nodeRes.nodePath) {
+    return {
+      success: false,
+      devices: [],
+      error: nodeRes.error || 'Failed to locate compatible Node.js runtime for device enumeration.'
+    };
+  }
+
+  const nodeExe = nodeRes.nodePath;
   try {
-    const stdout = execFileSync('node', [workerPath], { timeout: 5000, encoding: 'utf8' });
+    const stdout = execFileSync(nodeExe, [workerPath], { timeout: 5000, encoding: 'utf8', cwd: path.dirname(workerPath) });
     const parsed = JSON.parse(stdout);
     const rawList = Array.isArray(parsed.devices) ? parsed.devices : [];
     const sanitized = filterPlaybackDevices(rawList);

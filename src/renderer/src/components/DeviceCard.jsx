@@ -8,14 +8,24 @@ export function DeviceCard({
   otherSelectedId = null,
   onSelectDevice,
   volume,
-  onVolumeChange
+  onVolumeChange,
+  isStreaming = false,
+  isDegraded = false,
+  degradedError = null,
+  disabled = false
 }) {
   const percentage = Math.max(0, Math.min(100, Math.round(volume)));
   const hasDevice = Boolean(selectedDevice);
 
   // Status description text (understated, factual)
   let statusText = 'No device selected';
-  if (selectedDevice) {
+  if (isDegraded) {
+    statusText = `Stream error: ${degradedError || 'Output disconnected'}`;
+  } else if (isStreaming) {
+    statusText = selectedDevice?.isDefault
+      ? 'Streaming (Default Windows Output)'
+      : 'Streaming';
+  } else if (selectedDevice) {
     statusText = selectedDevice.isDefault
       ? 'Available (Default Windows Output)'
       : 'Available';
@@ -36,7 +46,7 @@ export function DeviceCard({
 
   // Multiple choices are available only if there are devices that are not already assigned to other slot
   const selectableDevices = availableDevices.filter((d) => d && d.id !== otherSelectedId);
-  const showDropdownChevron = selectableDevices.length > 1;
+  const showDropdownChevron = selectableDevices.length > 1 && !disabled;
 
   return (
     <div className="device-entry">
@@ -58,6 +68,7 @@ export function DeviceCard({
                     className="device-select"
                     value={selectedDevice ? selectedDevice.id : ''}
                     onChange={handleSelectChange}
+                    disabled={disabled}
                     aria-label={`Output ${slot} audio endpoint selection`}
                   >
                     {!selectedDevice && (

@@ -9,6 +9,8 @@ const { Tray, Menu, app } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { lifecycle } = require('./lifecycle');
+const { audioService } = require('./audio-service');
+const { IPC_CHANNELS } = require('../shared/ipc-contracts');
 
 /**
  * Creates and configures the system tray instance.
@@ -49,7 +51,21 @@ function createSystemTray(mainWindow) {
 
   // Construct context menu with exact specified items
   function updateContextMenu() {
-    const isRouting = lifecycle.isRoutingActive;
+    const isRouting = audioService.isRouting;
+    const state = audioService.state;
+    const isTransitioning = state === 'STARTING' || state === 'STOPPING';
+
+    if (state === 'RUNNING') {
+      tray.setToolTip('DuoAudio — Streaming Active');
+    } else if (state === 'PARTIALLY_DEGRADED') {
+      tray.setToolTip('DuoAudio — Degraded Stream');
+    } else if (state === 'STARTING') {
+      tray.setToolTip('DuoAudio — Starting...');
+    } else if (state === 'STOPPING') {
+      tray.setToolTip('DuoAudio — Stopping...');
+    } else {
+      tray.setToolTip('DuoAudio');
+    }
 
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -60,10 +76,18 @@ function createSystemTray(mainWindow) {
       },
       {
         label: isRouting ? 'Stop Routing' : 'Start Routing',
-        enabled: false, // Explicitly disabled for Phase 5A foundation
-        sublabel: 'Audio engine integration in Phase 5B',
-        click: () => {
-          // Deferred to Phase 5B
+        enabled: !isTransitioning,
+        click: async () => {
+          if (audioService.isRouting) {
+            console.log('[TRAY] Stop Routing triggered from system tray.');
+            await audioService.stopRouting();
+          } else {
+            console.log('[TRAY] Start Routing triggered from system tray.');
+            restoreAndFocusWindow();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send(IPC_CHANNELS.TRAY_TRIGGER_START);
+            }
+          }
         }
       },
       {
@@ -79,6 +103,15 @@ function createSystemTray(mainWindow) {
 
     tray.setContextMenu(contextMenu);
   }
+
+  // Dynamically update tray menu on routing status transitions
+  const unsubscribeStatus = audioService.onStatusChanged(() => {
+    updateContextMenu();
+  });
+
+  mainWindow.on('closed', () => {
+    unsubscribeStatus();
+  });
 
   updateContextMenu();
 

@@ -7,13 +7,13 @@
  */
 
 const { app } = require('electron');
+const { audioService } = require('./audio-service');
 
 class AppLifecycle {
   constructor() {
     this._isQuitting = false;
     this._tray = null;
     this._mainWindow = null;
-    this._isRoutingActive = false; // Mock for Phase 5A
   }
 
   /**
@@ -33,23 +33,34 @@ class AppLifecycle {
   }
 
   /**
-   * Whether audio routing is currently active (mock false in Phase 5A).
+   * Whether audio routing is currently active.
    * @returns {boolean}
    */
   get isRoutingActive() {
-    return this._isRoutingActive;
+    return audioService.isRouting;
   }
 
   /**
    * Initiates graceful application shutdown.
    */
-  quit() {
+  async quit() {
     if (this._isQuitting) return;
     this._isQuitting = true;
 
     console.log('[LIFECYCLE] Initiating clean DuoAudio shutdown...');
 
-    // Teardown system tray
+    // 1. Gracefully stop active audio routing child process and restore mute state
+    try {
+      if (audioService._child !== null || audioService.isRouting || audioService.state === 'STOPPING' || audioService.state === 'STARTING') {
+        console.log('[LIFECYCLE] Stopping active audio service before quit...');
+        await audioService.stopRouting();
+        console.log('[LIFECYCLE] Audio service stopped cleanly.');
+      }
+    } catch (err) {
+      console.warn('[LIFECYCLE] Error stopping audio service on quit:', err.message);
+    }
+
+    // 2. Teardown system tray
     if (this._tray) {
       try {
         this._tray.destroy();
@@ -60,7 +71,7 @@ class AppLifecycle {
       }
     }
 
-    // Teardown main window
+    // 3. Teardown main window
     if (this._mainWindow && !this._mainWindow.isDestroyed()) {
       try {
         this._mainWindow.destroy();
@@ -71,7 +82,7 @@ class AppLifecycle {
       }
     }
 
-    // Final Electron termination
+    // 4. Final Electron termination
     app.quit();
   }
 }

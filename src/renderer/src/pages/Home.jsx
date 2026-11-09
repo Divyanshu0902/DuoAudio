@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DeviceCard } from '../components/DeviceCard';
 import { PrimaryButton } from '../components/PrimaryButton';
 
@@ -14,6 +14,18 @@ export function Home() {
 
   // Unobtrusive user feedback notice
   const [feedbackNotice, setFeedbackNotice] = useState(null);
+
+  // Routing state machine: IDLE, STARTING, PREBUFFERING, RUNNING, PARTIALLY_DEGRADED, STOPPING, STOPPED, ERROR
+  const [routingState, setRoutingState] = useState('IDLE');
+  const [degradedSlot, setDegradedSlot] = useState(null);
+  const [degradedError, setDegradedError] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Ref to access current selections in event listeners without re-subscribing
+  const selectionsRef = useRef({ selectedDevice1Id, selectedDevice2Id, vol1, vol2, devices, isSubmitting, routingState });
+  useEffect(() => {
+    selectionsRef.current = { selectedDevice1Id, selectedDevice2Id, vol1, vol2, devices, isSubmitting, routingState };
+  });
 
   /**
    * Fetches audio playback endpoints from main process via IPC.
@@ -111,9 +123,76 @@ export function Home() {
     }
   }, [selectedDevice1Id, selectedDevice2Id]);
 
-  // Initial enumeration on mount
+  // Initial enumeration and routing status synchronization on mount
   useEffect(() => {
     fetchDevices(false);
+
+    // Sync initial routing status from main process
+    if (window.duoAudioAPI && typeof window.duoAudioAPI.getRoutingStatus === 'function') {
+      window.duoAudioAPI.getRoutingStatus().then((status) => {
+        if (status && status.state) {
+          setRoutingState(status.state);
+          if (status.state === 'PARTIALLY_DEGRADED') {
+            setDegradedSlot(status.failedSlot || null);
+            setDegradedError(status.error || null);
+          }
+        }
+      }).catch(() => {});
+    }
+
+    // Subscribe to live audio service state transitions
+    let unsubscribeStatus = () => {};
+    if (window.duoAudioAPI && typeof window.duoAudioAPI.onRoutingStatusChanged === 'function') {
+      unsubscribeStatus = window.duoAudioAPI.onRoutingStatusChanged((status) => {
+        if (!status) return;
+        const nextState = status.state || 'IDLE';
+        setRoutingState(nextState);
+
+        if (nextState === 'PARTIALLY_DEGRADED') {
+          const slot = status.failedSlot || (status.error?.includes('output1') ? 'output1' : 'output2');
+          setDegradedSlot(slot);
+          setDegradedError(status.error || 'Stream error');
+          setFeedbackNotice({
+            type: 'warning',
+            message: `Output ${slot === 'output1' ? '1' : '2'} encountered an error (${status.error || 'stream disconnected'}). The remaining output continues streaming.`
+          });
+        } else if (nextState === 'RUNNING') {
+          setDegradedSlot(null);
+          setDegradedError(null);
+        } else if (nextState === 'ERROR') {
+          setFeedbackNotice({
+            type: 'error',
+            message: status.error || 'An unexpected error occurred during audio routing.'
+          });
+        } else if (nextState === 'STOPPED' || nextState === 'IDLE') {
+          setDegradedSlot(null);
+          setDegradedError(null);
+          // Requirement 9: Display unresolved endpoint mute restoration warnings when applicable
+          if (status.muteState && status.muteState.unresolved) {
+            setFeedbackNotice({
+              type: 'warning',
+              message: `Warning: "${status.muteState.endpointName || 'Default Audio Device'}" was disconnected while muted. When reconnected, it may remain muted in Windows until unmuted in Windows Settings.`
+            });
+          }
+        }
+      });
+    }
+
+    // Subscribe to Tray Start Routing trigger
+    let unsubscribeTray = () => {};
+    if (window.duoAudioAPI && typeof window.duoAudioAPI.onTrayTriggerStart === 'function') {
+      unsubscribeTray = window.duoAudioAPI.onTrayTriggerStart(() => {
+        const cur = selectionsRef.current;
+        if (cur.routingState === 'IDLE' || cur.routingState === 'STOPPED' || cur.routingState === 'ERROR') {
+          handleStartSharing();
+        }
+      });
+    }
+
+    return () => {
+      unsubscribeStatus();
+      unsubscribeTray();
+    };
   }, []);
 
   // Handle device selection for Output 1
@@ -146,15 +225,134 @@ export function Home() {
     setFeedbackNotice(null);
   };
 
+  // Start Sharing execution
+  const handleStartSharing = async () => {
+    const cur = selectionsRef.current;
+    if (cur.isSubmitting) return;
+
+    if (!cur.selectedDevice1Id || !cur.selectedDevice2Id) {
+      setFeedbackNotice({
+        type: 'warning',
+        message: 'Please select two distinct audio devices before starting sharing.'
+      });
+      return;
+    }
+
+    if (cur.selectedDevice1Id === cur.selectedDevice2Id) {
+      setFeedbackNotice({
+        type: 'warning',
+        message: 'Output 1 and Output 2 cannot be assigned to the same audio device.'
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFeedbackNotice(null);
+
+    try {
+      const payload = {
+        device1Id: cur.selectedDevice1Id,
+        device2Id: cur.selectedDevice2Id,
+        vol1: cur.vol1 / 100,
+        vol2: cur.vol2 / 100
+      };
+
+      if (!window.duoAudioAPI || typeof window.duoAudioAPI.startRouting !== 'function') {
+        throw new Error('IPC startRouting API unavailable.');
+      }
+
+      const res = await window.duoAudioAPI.startRouting(payload);
+      if (!res || !res.success) {
+        setFeedbackNotice({
+          type: 'error',
+          message: res?.error || 'Failed to start dual audio routing.'
+        });
+      }
+    } catch (err) {
+      setFeedbackNotice({
+        type: 'error',
+        message: `Routing startup error: ${err.message}`
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Stop Sharing execution
+  const handleStopSharing = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      if (!window.duoAudioAPI || typeof window.duoAudioAPI.stopRouting !== 'function') {
+        throw new Error('IPC stopRouting API unavailable.');
+      }
+
+      const res = await window.duoAudioAPI.stopRouting();
+      if (!res || !res.success) {
+        setFeedbackNotice({
+          type: 'error',
+          message: res?.error || 'Failed to stop audio routing cleanly.'
+        });
+      }
+    } catch (err) {
+      setFeedbackNotice({
+        type: 'error',
+        message: `Routing stop error: ${err.message}`
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const selectedDev1 = devices.find((d) => d.id === selectedDevice1Id) || null;
   const selectedDev2 = devices.find((d) => d.id === selectedDevice2Id) || null;
 
+  // Active state calculations
+  const isRoutingActive = routingState === 'RUNNING' || routingState === 'PARTIALLY_DEGRADED' || routingState === 'PREBUFFERING';
+  const isStarting = routingState === 'STARTING';
+  const isStopping = routingState === 'STOPPING';
+  const isBusy = isSubmitting || isStarting || isStopping;
+
+  const isStopAction = isRoutingActive || isStopping;
+  let buttonLabel = 'Start Sharing';
+  if (isStarting) {
+    buttonLabel = 'Starting...';
+  } else if (isStopping) {
+    buttonLabel = 'Stopping...';
+  } else if (isRoutingActive) {
+    buttonLabel = 'Stop Sharing';
+  }
+
+  const isStartDisabled = !selectedDevice1Id || !selectedDevice2Id || selectedDevice1Id === selectedDevice2Id || isLoading || isBusy;
+  const isButtonDisabled = isStopAction ? isBusy : isStartDisabled;
+
+  const handlePrimaryButtonClick = () => {
+    if (isStopAction) {
+      handleStopSharing();
+    } else {
+      handleStartSharing();
+    }
+  };
+
+  // Dynamic header badge text
+  let badgeText = '2 OUTPUTS';
+  if (routingState === 'RUNNING') {
+    badgeText = 'STREAMING';
+  } else if (routingState === 'PARTIALLY_DEGRADED') {
+    badgeText = 'DEGRADED';
+  } else if (routingState === 'STARTING' || routingState === 'PREBUFFERING') {
+    badgeText = 'STARTING...';
+  } else if (routingState === 'STOPPING') {
+    badgeText = 'STOPPING...';
+  }
+
   return (
     <main className="content-area">
-      {/* Main Heading Row: "Audio Sharing" (left) + "2 OUTPUTS" (right) */}
+      {/* Main Heading Row: "Audio Sharing" (left) + dynamic badge (right) */}
       <div className="heading-row">
         <h1 className="main-heading">Audio Sharing</h1>
-        <span className="outputs-badge">2 OUTPUTS</span>
+        <span className="outputs-badge">{badgeText}</span>
       </div>
 
       {/* Authoritative Section Heading */}
@@ -171,6 +369,10 @@ export function Home() {
           onSelectDevice={handleSelectDevice1}
           volume={vol1}
           onVolumeChange={setVol1}
+          isStreaming={isRoutingActive && degradedSlot !== 'output1'}
+          isDegraded={degradedSlot === 'output1'}
+          degradedError={degradedSlot === 'output1' ? degradedError : null}
+          disabled={isRoutingActive || isBusy}
         />
 
         {/* Thin horizontal divider line between device entries */}
@@ -185,6 +387,10 @@ export function Home() {
           onSelectDevice={handleSelectDevice2}
           volume={vol2}
           onVolumeChange={setVol2}
+          isStreaming={isRoutingActive && degradedSlot !== 'output2'}
+          isDegraded={degradedSlot === 'output2'}
+          degradedError={degradedSlot === 'output2' ? degradedError : null}
+          disabled={isRoutingActive || isBusy}
         />
       </div>
 
@@ -205,16 +411,21 @@ export function Home() {
           </div>
         )}
 
-        {/* Primary Start Sharing Button (Strictly Disabled during Phase 5B) */}
-        <PrimaryButton label="Start Sharing" disabled={true} />
+        {/* Primary Start / Stop Sharing Button */}
+        <PrimaryButton
+          label={buttonLabel}
+          disabled={isButtonDisabled}
+          isStop={isStopAction}
+          onClick={handlePrimaryButtonClick}
+        />
 
         {/* Secondary Refresh Devices Button (Triggers Live WASAPI Enumeration) */}
         <button
           type="button"
           className="btn-refresh-devices"
-          disabled={isLoading}
+          disabled={isLoading || isRoutingActive || isBusy}
           onClick={() => fetchDevices(true)}
-          title="Query Windows for connected audio playback endpoints"
+          title={isRoutingActive ? 'Cannot refresh devices while streaming is active' : 'Query Windows for connected audio playback endpoints'}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />

@@ -1,6 +1,6 @@
 {
   "name": "duoaudio",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Windows audio duplication utility",
   "main": "src/main/main.js",
   "scripts": {
@@ -9,23 +9,81 @@
     "build:ui": "vite build --config vite.config.mjs",
     "start": "vite build --config vite.config.mjs && electron .",
     "electron": "electron .",
+    "package:dir": "vite build --config vite.config.mjs && electron-builder --dir --win --x64",
+    "package:dist": "vite build --config vite.config.mjs && electron-builder --win --x64",
     "enumerate": "node src/enumerate.js",
     "test:simultaneous": "node src/simultaneous_playback.js",
     "test:capture": "node src/system_capture.js",
     "test:routing": "node src/audio_router.js",
     "test:routing:dual": "node src/route-dual.js"
   },
-  "author": "",
+  "author": "DuoAudio Contributors",
   "license": "MIT",
   "dependencies": {
     "audify": "^1.10.1",
-    "loopback-capture": "^4.0.0",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "loopback-capture": "^4.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.2.1",
     "electron": "^33.4.11",
+    "electron-builder": "^26.18.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "vite": "^8.3.6"
+  },
+  "build": {
+    "appId": "com.duoaudio.desktop",
+    "productName": "DuoAudio",
+    "directories": {
+      "output": "dist/build"
+    },
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false,
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/audify/**",
+      "**/node_modules/loopback-capture/**",
+      "**/node_modules/bindings/**",
+      "**/node_modules/file-uri-to-path/**",
+      "**/src/audio_runner.js",
+      "**/src/output_stream.js",
+      "**/src/pcm_converter.js",
+      "**/src/audio_buffer.js",
+      "**/src/endpoint_mute.js",
+      "**/src/audio_endpoint.ps1",
+      "**/src/main/enumerate-worker.js"
+    ],
+    "files": [
+      "dist/renderer/**/*",
+      "src/main/**/*",
+      "src/preload/**/*",
+      "src/shared/**/*",
+      "src/audio_runner.js",
+      "src/output_stream.js",
+      "src/pcm_converter.js",
+      "src/audio_buffer.js",
+      "src/endpoint_mute.js",
+      "src/audio_endpoint.ps1",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DuoAudio"
+    }
   }
 }
