@@ -1,36 +1,41 @@
+/* ==========================================================================
+   DuoAudio - Authoritative Reference Design Tokens
+   ========================================================================== */
+
 :root {
-  /* Primary Palette from Reference */
-  --bg-primary: #101012;
-  --bg-surface: #17181A;
-  --bg-surface-hover: #1E1F22;
-  --bg-surface-active: #25262B;
+  /* Dark near-black base matching authoritative reference */
+  --bg-main: #0E0E10;
+  --bg-surface: #16171A;
+  --bg-elevated: #1F2126;
+  --bg-elevated-hover: #26282E;
 
-  --border-subtle: #292A2D;
-  --border-strong: #36373C;
+  --border-subtle: #292A2E;
+  --border-divider: #222326;
 
-  /* Primary Accent: Muted Indigo / Periwinkle */
-  --accent-indigo: #5E6BC7;
-  --accent-indigo-hover: #4F5CB7;
-  --accent-indigo-subtle: rgba(94, 107, 199, 0.12);
+  /* Primary Accent: Periwinkle Blue */
+  --accent-primary: #5C6CDB;
+  --accent-primary-hover: #505FC8;
+  --accent-primary-active: #4754B5;
+
+  /* Accent highlights for slider and icons */
+  --accent-slider: #6473F2;
+  --accent-icon: #9AA7FF;
 
   /* Typography Colors */
   --text-primary: #F1F1F3;
-  --text-secondary: #99999F;
-  --text-muted: #6B6C72;
+  --text-secondary: #95959C;
+  --text-muted: #6B6D74;
 
-  /* Status Colors */
-  --status-connected: #2DB86E;
-  --status-connected-bg: rgba(45, 184, 110, 0.1);
-  --status-warning: #D9822B;
-  --status-error: #D9383A;
+  /* Slider Track */
+  --slider-unfilled: #34353A;
 
   /* Geometry */
-  --radius-xs: 3px;
-  --radius-sm: 5px;
-  --radius-md: 8px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
 
   /* Typography */
-  --font-sans: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI Variable Display", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 }
 
 * {
@@ -45,10 +50,10 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: var(--bg-primary);
+  background-color: var(--bg-main);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -62,15 +67,12 @@ html, body {
 
 button {
   font-family: inherit;
-  font-size: inherit;
   border: none;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
+  background: none;
   outline: none;
+  cursor: pointer;
 }
 
-button:focus-visible {
-  outline: 1px solid var(--accent-indigo);
-  outline-offset: 1px;
+input {
+  font-family: inherit;
 }

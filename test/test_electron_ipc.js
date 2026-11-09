@@ -18,6 +18,8 @@ console.log('=================================================\n');
 // Test 1: Allowlisted channel definitions
 console.log('Test 1: Verifying allowlisted IPC channel definitions...');
 assert.strictEqual(IPC_CHANNELS.WINDOW_MINIMIZE, 'window:minimize');
+assert.strictEqual(IPC_CHANNELS.DEVICES_GET, 'devices:get');
+assert.strictEqual(IPC_CHANNELS.DEVICES_REFRESH, 'devices:refresh');
 assert.strictEqual(IPC_CHANNELS.APP_GET_INITIAL_STATE, 'app:get-initial-state');
 assert.strictEqual(IPC_CHANNELS.ROUTING_GET_STATUS, 'routing:get-status');
 console.log('  [+] Standard IPC channels confirmed.\n');
@@ -25,6 +27,8 @@ console.log('  [+] Standard IPC channels confirmed.\n');
 // Test 2: Channel validation security guard
 console.log('Test 2: Verifying channel security validation...');
 assert.strictEqual(isValidChannel('window:minimize'), true);
+assert.strictEqual(isValidChannel('devices:get'), true);
+assert.strictEqual(isValidChannel('devices:refresh'), true);
 assert.strictEqual(isValidChannel('app:get-initial-state'), true);
 assert.strictEqual(isValidChannel('routing:get-status'), true);
 assert.strictEqual(isValidChannel('arbitrary:channel'), false);

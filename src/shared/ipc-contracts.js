@@ -9,7 +9,11 @@ const IPC_CHANNELS = Object.freeze({
   // Window controls
   WINDOW_MINIMIZE: 'window:minimize',
 
-  // Application state (Mock for Phase 5A)
+  // Audio Device Enumeration (Phase 5B)
+  DEVICES_GET: 'devices:get',
+  DEVICES_REFRESH: 'devices:refresh',
+
+  // Application state & Routing (Mock for Phase 5A/5B)
   APP_GET_INITIAL_STATE: 'app:get-initial-state',
   ROUTING_GET_STATUS: 'routing:get-status'
 });

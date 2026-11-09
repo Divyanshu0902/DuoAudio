@@ -1,13 +1,13 @@
 /* ==========================================================================
-   DuoAudio - Desktop Application Styles (Reference Dark Settings Aesthetic)
+   DuoAudio - Authoritative Reference Stylesheet
    ========================================================================== */
 
-/* App Container */
+/* Main App Viewport */
 .app-container {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: var(--bg-primary);
+  background-color: var(--bg-main);
   overflow: hidden;
 }
 
@@ -19,9 +19,8 @@
   align-items: center;
   justify-content: space-between;
   height: 38px;
-  padding: 0 10px 0 16px;
-  background-color: var(--bg-primary);
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 12px 0 18px;
+  background-color: var(--bg-main);
   -webkit-app-region: drag;
   flex-shrink: 0;
 }
@@ -37,8 +36,8 @@
 }
 
 .titlebar-title {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-primary);
 }
@@ -46,7 +45,7 @@
 .titlebar-controls {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   -webkit-app-region: no-drag;
 }
 
@@ -54,8 +53,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 26px;
+  width: 30px;
+  height: 28px;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   -webkit-app-region: no-drag;
@@ -73,19 +72,18 @@
 }
 
 .titlebar-btn:active {
-  background-color: var(--bg-surface-active);
+  background-color: var(--bg-elevated);
 }
 
 /* --------------------------------------------------------------------------
-   Main Content Area with Generous Whitespace
+   Main Content Area
    -------------------------------------------------------------------------- */
 .content-area {
   flex: 1;
-  padding: 16px 20px 18px;
+  padding: 16px 24px 22px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
 
 /* Subtle scrollbar */
@@ -102,132 +100,96 @@
   border-radius: 3px;
 }
 
-.content-area::-webkit-scrollbar-thumb:hover {
-  background: var(--border-strong);
-}
-
 /* --------------------------------------------------------------------------
-   Status Strip (Engine State)
+   Heading Section: "Audio Sharing" + "2 OUTPUTS"
    -------------------------------------------------------------------------- */
-.status-strip {
+.heading-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  padding: 9px 14px;
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  flex-shrink: 0;
+  margin-bottom: 22px;
 }
 
-.status-strip-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.status-strip-value {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.status-dot.ready,
-.status-dot.connected {
-  background-color: var(--status-connected);
-}
-
-.status-dot.routing {
-  background-color: var(--accent-indigo);
-}
-
-.status-dot.disconnected {
-  background-color: var(--text-muted);
-}
-
-/* --------------------------------------------------------------------------
-   Section Groups & Cards (Settings-style grouping)
-   -------------------------------------------------------------------------- */
-.section-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.section-header {
-  font-size: 10px;
+.main-heading {
+  font-size: 32px;
   font-weight: 600;
-  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  line-height: 1.15;
+}
+
+.outputs-badge {
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--text-secondary);
-  margin-bottom: 6px;
-  padding-left: 2px;
-}
-
-.grouped-card {
-  display: flex;
-  flex-direction: column;
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
-}
-
-.group-divider {
-  height: 1px;
-  background-color: var(--border-subtle);
-  margin: 14px 0;
 }
 
 /* --------------------------------------------------------------------------
-   Device Section within Grouped Card
+   Section Heading: "AVAILABLE DEVICES"
    -------------------------------------------------------------------------- */
-.device-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.section-heading {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
 }
 
-.device-section-header {
+/* --------------------------------------------------------------------------
+   Device List & Items
+   -------------------------------------------------------------------------- */
+.device-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.device-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.device-top-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 14px;
 }
 
-.device-slot-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--accent-indigo);
-  letter-spacing: 0.02em;
-}
-
-.device-status-badge {
-  display: inline-flex;
+.device-identity {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-secondary);
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
 }
 
-.device-info {
+/* Rounded-square charcoal icon container */
+.device-icon-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-elevated);
+  flex-shrink: 0;
+}
+
+.device-meta-col {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
 .device-name {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 18px;
+  font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -235,105 +197,205 @@
   text-overflow: ellipsis;
 }
 
-.device-meta {
-  font-size: 11px;
+/* Device Selection Dropdown (Phase 5B) */
+.device-select-container {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.device-select-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+.device-select {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  outline: none;
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  padding: 1px 18px 1px 0px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.device-select:hover:not(:disabled) {
+  color: #FFFFFF;
+}
+
+.device-select:focus {
+  border-color: var(--border-subtle);
+  background-color: var(--bg-surface);
+  padding-left: 6px;
+}
+
+.device-select-chevron {
+  position: absolute;
+  right: 4px;
+  pointer-events: none;
+  transition: transform 0.15s ease;
+}
+
+.device-select:focus + .device-select-chevron {
+  transform: rotate(180deg);
+}
+
+.device-option {
+  background-color: #17181C;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: normal;
+  padding: 8px 12px;
+}
+
+.device-option:disabled {
+  color: var(--text-muted);
+  background-color: #121315;
+}
+
+.device-name-empty {
+  font-size: 18px;
+  font-weight: 600;
   color: var(--text-muted);
 }
 
-/* --------------------------------------------------------------------------
-   Volume Slider Control (8px Track, Inset Width, 14px Thumb)
-   -------------------------------------------------------------------------- */
-.volume-control {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.volume-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 11px;
+.device-status {
+  font-size: 14px;
+  font-weight: 400;
   color: var(--text-secondary);
-  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.volume-label {
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.volume-value {
-  font-weight: 500;
+.device-percentage {
+  font-size: 17px;
+  font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
-}
-
-.volume-slider-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 0;
-}
-
-/* Shorter slider width: 88% width provides horizontal inset */
-.volume-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 90%;
-  height: 8px; /* Required 8px track thickness */
-  border-radius: 4px; /* Rounded track ends */
-  outline: none;
-  cursor: pointer;
-  background: var(--border-subtle);
-  transition: background 0.08s ease;
-}
-
-.volume-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px; /* Required ~14px thumb diameter */
-  height: 14px;
-  border-radius: 50%;
-  background: #F1F1F3;
-  border: 1px solid rgba(16, 16, 18, 0.6);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-  cursor: pointer;
-  transition: transform 0.1s ease, background-color 0.1s ease;
-}
-
-.volume-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
-  background: #FFFFFF;
-}
-
-.volume-slider::-webkit-slider-thumb:active {
-  transform: scale(1.0);
-  background: #E0E2F5;
+  flex-shrink: 0;
+  text-align: right;
 }
 
 /* --------------------------------------------------------------------------
-   Actions Section
+   Authoritative 8px Volume Slider
    -------------------------------------------------------------------------- */
-.actions-section {
+.slider-container {
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.authoritative-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px; /* Required 8px thickness */
+  border-radius: 4px; /* Fully rounded track ends */
+  outline: none;
+  cursor: pointer;
+  background: var(--slider-unfilled);
+  transition: background 0.08s ease;
+}
+
+.authoritative-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px; /* Required ~14px diameter */
+  height: 14px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.authoritative-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.authoritative-slider::-webkit-slider-thumb:active {
+  transform: scale(1.05);
+}
+
+/* Thin horizontal divider between device entries */
+.device-divider {
+  height: 1px;
+  background-color: var(--border-divider);
+  margin: 18px 0;
+}
+
+/* --------------------------------------------------------------------------
+   Bottom Action Area (Anchored to Bottom)
+   -------------------------------------------------------------------------- */
+.bottom-actions {
   margin-top: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 4px;
+  gap: 10px;
+  padding-top: 18px;
 }
 
-.action-notice {
-  font-size: 11px;
-  color: var(--text-muted);
-  text-align: center;
-  padding: 6px 10px;
+.feedback-notice {
+  font-size: 12px;
+  color: var(--text-primary);
+  padding: 8px 12px;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   animation: fadeIn 0.15s ease-out;
+  line-height: 1.4;
+}
+
+.feedback-notice.warning {
+  border-color: rgba(234, 179, 8, 0.4);
+  background-color: rgba(234, 179, 8, 0.08);
+  color: #FACC15;
+}
+
+.feedback-notice.error {
+  border-color: rgba(239, 68, 68, 0.4);
+  background-color: rgba(239, 68, 68, 0.08);
+  color: #F87171;
+}
+
+.feedback-notice.info {
+  border-color: rgba(94, 107, 199, 0.4);
+  background-color: rgba(94, 107, 199, 0.08);
+  color: #A5B0F8;
+}
+
+.feedback-notice-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.75;
+}
+
+.feedback-notice-close:hover {
+  opacity: 1;
 }
 
 @keyframes fadeIn {
@@ -341,83 +403,95 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-.btn-primary {
+/* Primary "Start Sharing" Button (Strictly Disabled in Phase 5B) */
+.btn-start-sharing {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
+  gap: 10px;
+  height: 48px;
+  width: 100%;
+  border-radius: var(--radius-md);
+  font-size: 16px;
   font-weight: 500;
-  letter-spacing: 0.01em;
-  background-color: var(--accent-indigo);
+  letter-spacing: -0.01em;
+  background-color: var(--accent-primary);
   color: #FFFFFF;
-  transition: background-color 0.12s ease;
+  transition: background-color 0.12s ease, opacity 0.12s ease;
 }
 
-.btn-primary:hover:not(:disabled) {
-  background-color: var(--accent-indigo-hover);
+.btn-start-sharing:hover:not(:disabled) {
+  background-color: var(--accent-primary-hover);
 }
 
-.btn-primary:disabled {
-  background-color: #191A1D;
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
+.btn-start-sharing:disabled {
+  opacity: 0.85;
   cursor: not-allowed;
 }
 
-.btn-secondary {
+/* Secondary "Refresh Devices" Button */
+.btn-refresh-devices {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
+  gap: 10px;
+  height: 44px;
+  width: 100%;
+  border-radius: var(--radius-md);
+  font-size: 15px;
   font-weight: 500;
   background-color: transparent;
   border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
-  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  color: var(--text-primary);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
-.btn-secondary:hover {
+.btn-refresh-devices:hover:not(:disabled) {
   background-color: var(--bg-surface);
-  color: var(--text-primary);
-  border-color: var(--border-strong);
+  border-color: #38393F;
+}
+
+.btn-refresh-devices:active:not(:disabled) {
+  background-color: var(--bg-elevated);
+}
+
+.btn-refresh-devices:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 /* --------------------------------------------------------------------------
-   Settings View
+   Settings Page (Aligned to Same Minimal Aesthetic)
    -------------------------------------------------------------------------- */
 .settings-view {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .settings-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
+  padding: 4px 0;
 }
 
 .settings-back-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   border-radius: var(--radius-sm);
   background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
-  transition: all 0.12s ease;
+  color: var(--text-primary);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .settings-back-btn:hover {
-  background-color: var(--bg-surface-hover);
-  color: var(--text-primary);
-  border-color: var(--border-strong);
+  background-color: var(--bg-elevated);
+  border-color: #38393F;
 }
 
 .settings-back-btn svg {
@@ -425,52 +499,74 @@
 }
 
 .settings-title {
-  font-size: 13px;
+  font-size: 26px;
   font-weight: 600;
+  letter-spacing: -0.02em;
   color: var(--text-primary);
-  letter-spacing: -0.01em;
+}
+
+.settings-section-label {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
 }
 
 .settings-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   padding: 4px 0;
 }
 
 .settings-row-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .settings-item-title {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
 }
 
 .settings-item-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  line-height: 1.35;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
 .settings-item-meta {
-  font-size: 11px;
-  font-weight: 400;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
-.settings-badge-active {
-  font-size: 10px;
+.settings-badge {
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 2px 7px;
-  border-radius: var(--radius-xs);
-  background-color: var(--status-connected-bg);
-  color: var(--status-connected);
+  padding: 3px 8px;
+  border-radius: 4px;
+  background-color: rgba(92, 108, 219, 0.15);
+  color: #7B88ED;
+}
+
+.settings-divider {
+  height: 1px;
+  background-color: var(--border-subtle);
+  margin: 10px 0;
 }

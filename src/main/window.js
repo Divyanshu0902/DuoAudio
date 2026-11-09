@@ -123,7 +123,7 @@ function createMainWindow() {
     maximizable: false, // Native maximizing strictly disabled
     fullscreenable: false,
     show: false, // Shown gracefully on ready-to-show
-    backgroundColor: '#101012', // Deep near-black background matching visual specification
+    backgroundColor: '#101012', // Deep near-black background matching authoritative reference
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),

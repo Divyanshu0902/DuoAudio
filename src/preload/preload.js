@@ -10,6 +10,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Channel constants defined locally to allow sandbox: true without module-resolution failures
 const CHANNELS = Object.freeze({
   WINDOW_MINIMIZE: 'window:minimize',
+  DEVICES_GET: 'devices:get',
+  DEVICES_REFRESH: 'devices:refresh',
   APP_GET_INITIAL_STATE: 'app:get-initial-state',
   ROUTING_GET_STATUS: 'routing:get-status'
 });
@@ -24,7 +26,23 @@ const duoAudioAPI = Object.freeze({
   },
 
   /**
-   * Retrieves the initial UI configuration and mock device status.
+   * Retrieves active Windows audio playback endpoints.
+   * @returns {Promise<{ success: boolean, devices: Array<Object>, error: string|null }>}
+   */
+  getAudioDevices: () => {
+    return ipcRenderer.invoke(CHANNELS.DEVICES_GET);
+  },
+
+  /**
+   * Triggers a live re-enumeration of Windows audio playback endpoints.
+   * @returns {Promise<{ success: boolean, devices: Array<Object>, error: string|null }>}
+   */
+  refreshAudioDevices: () => {
+    return ipcRenderer.invoke(CHANNELS.DEVICES_REFRESH);
+  },
+
+  /**
+   * Retrieves the initial UI configuration.
    * @returns {Promise<Object>}
    */
   getInitialState: () => {
