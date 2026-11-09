@@ -4,11 +4,16 @@
   "description": "Windows audio duplication utility",
   "main": "src/enumerate.js",
   "scripts": {
-    "enumerate": "node src/enumerate.js"
+    "enumerate": "node src/enumerate.js",
+    "test:simultaneous": "node src/simultaneous_playback.js",
+    "test:capture": "node src/system_capture.js",
+    "test:routing": "node src/audio_router.js",
+    "test:routing:dual": "node src/route-dual.js"
   },
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "audify": "^1.10.1"
+    "audify": "^1.10.1",
+    "loopback-capture": "^4.0.0"
   }
 }
