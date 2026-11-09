@@ -1,0 +1,476 @@
+/* ==========================================================================
+   DuoAudio - Desktop Application Styles (Reference Dark Settings Aesthetic)
+   ========================================================================== */
+
+/* App Container */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--bg-primary);
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Custom Frameless Title Bar
+   -------------------------------------------------------------------------- */
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  padding: 0 10px 0 16px;
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.titlebar-icon {
+  display: block;
+}
+
+.titlebar-title {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  -webkit-app-region: no-drag;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.titlebar-btn svg {
+  pointer-events: none;
+}
+
+.titlebar-btn:hover {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.titlebar-btn:active {
+  background-color: var(--bg-surface-active);
+}
+
+/* --------------------------------------------------------------------------
+   Main Content Area with Generous Whitespace
+   -------------------------------------------------------------------------- */
+.content-area {
+  flex: 1;
+  padding: 16px 20px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Subtle scrollbar */
+.content-area::-webkit-scrollbar {
+  width: 5px;
+}
+
+.content-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content-area::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 3px;
+}
+
+.content-area::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* --------------------------------------------------------------------------
+   Status Strip (Engine State)
+   -------------------------------------------------------------------------- */
+.status-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.status-strip-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.status-strip-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.ready,
+.status-dot.connected {
+  background-color: var(--status-connected);
+}
+
+.status-dot.routing {
+  background-color: var(--accent-indigo);
+}
+
+.status-dot.disconnected {
+  background-color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Section Groups & Cards (Settings-style grouping)
+   -------------------------------------------------------------------------- */
+.section-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.section-header {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  padding-left: 2px;
+}
+
+.grouped-card {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.group-divider {
+  height: 1px;
+  background-color: var(--border-subtle);
+  margin: 14px 0;
+}
+
+/* --------------------------------------------------------------------------
+   Device Section within Grouped Card
+   -------------------------------------------------------------------------- */
+.device-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.device-slot-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent-indigo);
+  letter-spacing: 0.02em;
+}
+
+.device-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.device-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.device-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Volume Slider Control (8px Track, Inset Width, 14px Thumb)
+   -------------------------------------------------------------------------- */
+.volume-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.volume-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 0 4px;
+}
+
+.volume-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.volume-value {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.volume-slider-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+/* Shorter slider width: 88% width provides horizontal inset */
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 90%;
+  height: 8px; /* Required 8px track thickness */
+  border-radius: 4px; /* Rounded track ends */
+  outline: none;
+  cursor: pointer;
+  background: var(--border-subtle);
+  transition: background 0.08s ease;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px; /* Required ~14px thumb diameter */
+  height: 14px;
+  border-radius: 50%;
+  background: #F1F1F3;
+  border: 1px solid rgba(16, 16, 18, 0.6);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  background: #FFFFFF;
+}
+
+.volume-slider::-webkit-slider-thumb:active {
+  transform: scale(1.0);
+  background: #E0E2F5;
+}
+
+/* --------------------------------------------------------------------------
+   Actions Section
+   -------------------------------------------------------------------------- */
+.actions-section {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.action-notice {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 6px 10px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.btn-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  background-color: var(--accent-indigo);
+  color: #FFFFFF;
+  transition: background-color 0.12s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--accent-indigo-hover);
+}
+
+.btn-primary:disabled {
+  background-color: #191A1D;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  background-color: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.btn-secondary:hover {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+/* --------------------------------------------------------------------------
+   Settings View
+   -------------------------------------------------------------------------- */
+.settings-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  transition: all 0.12s ease;
+}
+
+.settings-back-btn:hover {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.settings-back-btn svg {
+  pointer-events: none;
+}
+
+.settings-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.settings-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-item-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.settings-item-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.settings-item-meta {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-badge-active {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  background-color: var(--status-connected-bg);
+  color: var(--status-connected);
+}
