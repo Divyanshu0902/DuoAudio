@@ -24,14 +24,14 @@ class OutputStream {
   /**
    * @param {Object} options
    * @param {string} [options.name="Output"] - Descriptive label (e.g. "Output A")
-   * @param {number} [options.volume=0.2] - Software volume limit (0.0 to 1.0, default 0.2 = 20%)
+   * @param {number} [options.volume=1.0] - Software volume limit (0.0 to 1.0, default 1.0 = unity gain)
    * @param {number} [options.maxCapacityMs=200] - Bounded buffer capacity in ms
    * @param {number} [options.targetPrebufferMs=80] - Pre-buffer threshold before starting playback
    * @param {Function} [options.onError=null] - Asynchronous failure callback: (error, stream) => void
    */
   constructor(options = {}) {
     this.name = options.name || "Output";
-    this.volume = typeof options.volume === "number" ? Math.max(0, Math.min(1, options.volume)) : 0.2;
+    this.volume = typeof options.volume === "number" ? Math.max(0, Math.min(1, options.volume)) : 1.0;
     this.frameSize = FRAME_SIZE;
     this.sampleRate = SAMPLE_RATE;
     this.channels = CHANNELS;

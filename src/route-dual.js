@@ -24,11 +24,13 @@ const { OutputStream } = require("./output_stream");
 const { EndpointMuteManager } = require("./endpoint_mute");
 
 // Parse CLI arguments:
-// node src/route-dual.js [durationSec] [--device1 <nameOrId>] [--device2 <nameOrId>] [--allow-conflict] [--no-mute]
+// node src/route-dual.js [durationSec] [--device1 <nameOrId>] [--device2 <nameOrId>] [--vol1 <0.0-1.0>] [--vol2 <0.0-1.0>] [--allow-conflict] [--no-mute]
 const args = process.argv.slice(2);
 let durationSec = null;
 let device1Filter = null;
 let device2Filter = null;
+let vol1 = 1.0;
+let vol2 = 1.0;
 let allowConflict = false;
 let noMute = false;
 
@@ -38,6 +40,30 @@ for (let i = 0; i < args.length; i++) {
     device1Filter = args[++i];
   } else if (arg === "--device2" && i + 1 < args.length) {
     device2Filter = args[++i];
+  } else if (arg === "--vol1") {
+    if (i + 1 >= args.length) {
+      console.error("[FATAL] Missing value for --vol1 (expected a number between 0.0 and 1.0)");
+      process.exit(1);
+    }
+    const rawVal = args[++i];
+    const parsedVal = parseFloat(rawVal);
+    if (isNaN(parsedVal) || parsedVal < 0.0 || parsedVal > 1.0) {
+      console.error(`[FATAL] Invalid --vol1: value must be a number between 0.0 and 1.0 (got: "${rawVal}")`);
+      process.exit(1);
+    }
+    vol1 = parsedVal;
+  } else if (arg === "--vol2") {
+    if (i + 1 >= args.length) {
+      console.error("[FATAL] Missing value for --vol2 (expected a number between 0.0 and 1.0)");
+      process.exit(1);
+    }
+    const rawVal = args[++i];
+    const parsedVal = parseFloat(rawVal);
+    if (isNaN(parsedVal) || parsedVal < 0.0 || parsedVal > 1.0) {
+      console.error(`[FATAL] Invalid --vol2: value must be a number between 0.0 and 1.0 (got: "${rawVal}")`);
+      process.exit(1);
+    }
+    vol2 = parsedVal;
   } else if (arg === "--allow-conflict") {
     allowConflict = true;
   } else if (arg === "--no-mute") {
@@ -58,12 +84,16 @@ function printHelp() {
   console.log("\nOptions:");
   console.log("  --device1 <nameOrId>   Target playback device 1 (name substring or runtime ID)");
   console.log("  --device2 <nameOrId>   Target playback device 2 (name substring or runtime ID)");
+  console.log("  --vol1 <0.0-1.0>       Software volume for Device 1 (default: 1.0 = unity gain)");
+  console.log("  --vol2 <0.0-1.0>       Software volume for Device 2 (default: 1.0 = unity gain)");
   console.log("  --allow-conflict       Bypass default-output conflict warning prompt");
   console.log("  --no-mute              Disable automatic default endpoint muting (speakers remain audible)");
   console.log("  -h, --help             Show this help message");
   console.log("\nDefaults:");
   console.log("  Device 1: realme Buds T310 (preferred substring: 'realme')");
   console.log("  Device 2: Airdopes 161 (preferred substring: 'airdopes')");
+  console.log("  Volume 1: 1.0 (100% unity gain)");
+  console.log("  Volume 2: 1.0 (100% unity gain)");
   console.log("  Duration: Unlimited (runs until Ctrl+C)");
   console.log("  Mute    : Active (default render endpoint automatically muted during routing)");
 }
@@ -253,12 +283,18 @@ async function runDualRouter() {
   console.log(`  Channels               : ${CHANNELS} (stereo)`);
   console.log(`  Capture Format         : Signed 16-bit PCM (S16LE, 10 ms buffers)`);
   console.log(`  Converter Output       : 32-bit Float PCM (Float32LE, 20 ms / 7,680 bytes)`);
-  console.log(`  Software Output Volume : 20% (clamped on each stream for hearing safety)`);
+  console.log(`  Software Output Volume : Output 1 = ${Math.round(vol1 * 100)}% (${vol1 === 1.0 ? "1.00 unity" : vol1.toFixed(2)}), Output 2 = ${Math.round(vol2 * 100)}% (${vol2 === 1.0 ? "1.00 unity" : vol2.toFixed(2)})`);
   console.log(`  Per-Output Queue Cap   : 200 ms (10 buffers of 20 ms, drop-oldest)`);
   console.log(`  Per-Output Prebuffer   : 80 ms (4 buffers of 20 ms before playback start)`);
   console.log(`  Rate Pacer             : 10 ms interval, wall-clock estimated lead <= 40 ms`);
   console.log(`  Failure Isolation      : Active (failure of one output does not halt the other)`);
-  console.log(`  Endpoint Mute State    : ${endpointMute.isMutedByDuoAudio ? "MUTED by DuoAudio" : (endpointMute.originallyMuted ? "Originally MUTED" : "UNMUTED (--no-mute)")}\n`);
+  console.log(`  Endpoint Mute State    : ${endpointMute.isMutedByDuoAudio ? "MUTED by DuoAudio" : (endpointMute.originallyMuted ? "Originally MUTED" : "UNMUTED (--no-mute)")}`);
+  if (vol1 === 1.0 || vol2 === 1.0) {
+    console.log("  [NOTICE] Output operating at unity gain (0 dBFS). Audio level is now ~24 dB louder than");
+    console.log("           previous 20% builds. Set Windows master volume to a low, comfortable level first.\n");
+  } else {
+    console.log("");
+  }
 
   // Step 6: Initialize Subsystems
   const converter = new PcmConverter({
@@ -288,7 +324,7 @@ async function runDualRouter() {
 
   const stream1 = new OutputStream({
     name: "Output 1",
-    volume: 0.2,
+    volume: vol1,
     maxCapacityMs: 200,
     targetPrebufferMs: 80,
     onError: handleStreamError
@@ -296,7 +332,7 @@ async function runDualRouter() {
 
   const stream2 = new OutputStream({
     name: "Output 2",
-    volume: 0.2,
+    volume: vol2,
     maxCapacityMs: 200,
     targetPrebufferMs: 80,
     onError: handleStreamError
