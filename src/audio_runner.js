@@ -19,6 +19,7 @@ const { RtAudio, RtAudioApi } = require('audify');
 const { PcmConverter, SAMPLE_RATE, CHANNELS } = require('./pcm_converter');
 const { OutputStream } = require('./output_stream');
 const { EndpointMuteManager } = require('./endpoint_mute');
+const { CaptureTelemetry, createTelemetrySnapshot } = require('./telemetry');
 
 // State tracking
 let runnerState = 'IDLE'; // IDLE, STARTING, PREBUFFERING, RUNNING, PARTIALLY_DEGRADED, STOPPING, STOPPED, ERROR
@@ -28,7 +29,9 @@ let stream1 = null;
 let stream2 = null;
 let endpointMute = null;
 let metricsTimer = null;
+let telemetryTimer = null;
 let durationTimer = null;
+let captureTelemetry = null;
 
 // Metrics accumulator
 let windowSamples = 0;
@@ -126,6 +129,7 @@ async function shutdown(reason) {
   updateState('STOPPING', { reason });
 
   if (metricsTimer) clearInterval(metricsTimer);
+  if (telemetryTimer) clearInterval(telemetryTimer);
   if (durationTimer) clearTimeout(durationTimer);
 
   // 1. Stop capture
@@ -177,6 +181,23 @@ async function shutdown(reason) {
     status: restorationResult.status || (restorationResult.restored ? 'RESTORED' : 'FAILED'),
     endpointId: endpointMute?.targetEndpoint?.id || null,
     error: restorationResult.error || null
+  });
+
+  // 6. Restore original default playback endpoint if it was switched
+  let defaultRestorationResult = { restored: false, status: 'NOT_REQUIRED' };
+  if (endpointMute && endpointMute.defaultSwitchedByDuoAudio) {
+    try {
+      defaultRestorationResult = await endpointMute.restoreDefaultEndpoint();
+    } catch (err) {
+      defaultRestorationResult = { restored: false, status: 'FAILED', error: err.message };
+    }
+  }
+
+  sendIpcMessage({
+    type: 'DEFAULT_ENDPOINT_RESTORATION_RESULT',
+    status: defaultRestorationResult.status || (defaultRestorationResult.restored ? 'RESTORED' : 'FAILED'),
+    endpointId: endpointMute?.originalDefaultEndpoint?.id || null,
+    error: defaultRestorationResult.error || null
   });
 
   // Clean exit code reflects restoration result
@@ -249,53 +270,168 @@ async function startDualRouter(config) {
   endpointMute = new EndpointMuteManager({ enabled: !noMute });
 
   if (!noMute) {
-    let defaultEp;
+    let defaultEp = null;
+    let querySucceeded = false;
+
+    // Case A: Query default playback endpoint
     try {
       defaultEp = await endpointMute.queryDefault();
+      querySucceeded = true;
     } catch (err) {
-      const errorMsg = `Default endpoint query failed: ${err.message}`;
-      console.error(`[RUNNER FATAL] ${errorMsg}`);
-      sendIpcMessage({ type: 'ERROR', error: errorMsg, fatal: true });
-      updateState('ERROR', { error: errorMsg });
-      process.exit(1);
-    }
-
-    const willMute = Boolean(defaultEp && !endpointMute.originallyMuted);
-
-    // In IPC mode, execute the explicit handshake before muting
-    if (typeof process.send === 'function' && process.connected) {
+      console.warn(`[RUNNER WARNING] Default endpoint query failed: ${err.message}. Marking endpoint muting unavailable.`);
+      // Case A: Default endpoint query fails
+      // - Do not attempt to mute anything.
+      // - Mark endpoint muting unavailable for this session.
+      // - Send a structured non-fatal warning to the main process.
+      // - Continue initializing audio routing.
+      endpointMute.enabled = false;
       sendIpcMessage({
-        type: 'MUTE_BASELINE',
-        endpointId: defaultEp ? defaultEp.id : null,
-        endpointName: defaultEp ? defaultEp.name : null,
-        originallyMuted: endpointMute.originallyMuted,
-        willMute
+        type: 'WARNING',
+        code: 'ENDPOINT_MUTE_UNAVAILABLE',
+        message: 'Endpoint muting is unavailable for this session. Audio sharing will continue, but Windows default speakers may also play audio.',
+        details: err.message
       });
-
-      const ackReceived = await waitForMuteBaselineAck(defaultEp ? defaultEp.id : null, 5000);
-      if (!ackReceived) {
-        const errorMsg = 'Mute baseline acknowledgement timeout or rejection from parent process. Aborting startup without muting.';
-        console.error(`[RUNNER FATAL] ${errorMsg}`);
-        sendIpcMessage({ type: 'ERROR', error: errorMsg, fatal: true });
-        updateState('ERROR', { error: errorMsg });
-        process.exit(1);
-      }
     }
 
-    // Only after ACK is received, execute mute operation if willMute is true
-    if (willMute) {
+    if (querySucceeded && defaultEp) {
+      // Step 3a: Automatic Default Playback Device Resolution (Zero-Config Routing)
+      // Discover active Windows Core Audio endpoints to resolve built-in physical speakers
       try {
-        await endpointMute.muteTarget();
+        const allCoreEndpoints = await endpointMute.listEndpoints();
+        const builtInSpeaker = endpointMute.identifyBuiltInSpeakers(allCoreEndpoints);
+
+        // If a built-in speaker exists and is not currently the default endpoint:
+        if (builtInSpeaker && builtInSpeaker.id && builtInSpeaker.id !== defaultEp.id) {
+          console.log(`[RUNNER AUTO-CONFIG] Current default output: "${defaultEp.name}" (${defaultEp.id}).`);
+          console.log(`[RUNNER AUTO-CONFIG] Setting Windows default output to built-in speaker: "${builtInSpeaker.name}" (${builtInSpeaker.id})...`);
+
+          // Record original default baseline before making changes
+          endpointMute.originalDefaultEndpoint = {
+            id: defaultEp.id,
+            name: defaultEp.name
+          };
+
+          // Notify parent Electron supervisor immediately
+          sendIpcMessage({
+            type: 'DEFAULT_ENDPOINT_BASELINE',
+            originalEndpointId: defaultEp.id,
+            originalEndpointName: defaultEp.name,
+            targetEndpointId: builtInSpeaker.id,
+            targetEndpointName: builtInSpeaker.name
+          });
+
+          await endpointMute.setDefaultEndpoint(builtInSpeaker.id);
+          endpointMute.defaultSwitchedByDuoAudio = true;
+          console.log(`[RUNNER AUTO-CONFIG] Windows default output successfully set to "${builtInSpeaker.name}".`);
+
+          // Refresh defaultEp to the newly set speaker endpoint
+          defaultEp = await endpointMute.queryDefault();
+        }
+      } catch (switchErr) {
+        console.warn(`[RUNNER WARNING] Automatic default endpoint switch error: ${switchErr.message}. Continuing with current default.`);
         sendIpcMessage({
-          type: 'MUTE_APPLIED',
-          endpointId: defaultEp.id
+          type: 'WARNING',
+          code: 'DEFAULT_SWITCH_FAILED',
+          message: 'Automatic default endpoint switch failed. Audio sharing will continue with current default device.',
+          details: switchErr.message
         });
-      } catch (err) {
-        const errorMsg = `Default endpoint mute execution failed: ${err.message}`;
-        console.error(`[RUNNER FATAL] ${errorMsg}`);
-        sendIpcMessage({ type: 'ERROR', error: errorMsg, fatal: true });
-        updateState('ERROR', { error: errorMsg });
-        process.exit(1);
+      }
+
+      const willMute = Boolean(!endpointMute.originallyMuted);
+
+      // In IPC mode, execute the explicit handshake before muting
+      let ackReceived = true;
+      if (typeof process.send === 'function' && process.connected) {
+        sendIpcMessage({
+          type: 'MUTE_BASELINE',
+          endpointId: defaultEp.id,
+          endpointName: defaultEp.name,
+          originallyMuted: endpointMute.originallyMuted,
+          willMute
+        });
+
+        ackReceived = await waitForMuteBaselineAck(defaultEp.id, 5000);
+        if (!ackReceived) {
+          console.warn('[RUNNER WARNING] Mute baseline acknowledgement timeout or rejection from parent process. Skipping mute operation.');
+          endpointMute.enabled = false;
+          sendIpcMessage({
+            type: 'WARNING',
+            code: 'ENDPOINT_MUTE_UNAVAILABLE',
+            message: 'Endpoint muting is unavailable for this session. Audio sharing will continue, but Windows default speakers may also play audio.',
+            details: 'Mute baseline acknowledgement timeout'
+          });
+        }
+      }
+
+      // If willMute is true and ACK was received, attempt mute operation
+      if (willMute && ackReceived) {
+        try {
+          await endpointMute.muteTarget();
+          // Case C: Endpoint muting succeeds
+          // - Preserve existing baseline tracking.
+          // - Confirm mute application.
+          sendIpcMessage({
+            type: 'MUTE_APPLIED',
+            endpointId: defaultEp.id
+          });
+        } catch (err) {
+          // Case B: Endpoint mute operation fails
+          // A failed mute operation must NEVER be interpreted as proof that the Windows endpoint remains unmuted.
+          // Immediate recovery: attempt to unmute that exact endpoint and verify resulting state.
+          console.warn(`[RUNNER WARNING] Default endpoint mute execution failed: ${err.message}. Initiating recovery unmute...`);
+
+          let recoveryRes = { success: false, verifiedUnmuted: false, status: 'UNRESOLVED' };
+          try {
+            recoveryRes = await endpointMute.unmuteAndVerify();
+          } catch (recErr) {
+            recoveryRes = { success: false, verifiedUnmuted: false, status: 'UNRESOLVED', error: recErr.message };
+          }
+
+          if (recoveryRes.verifiedUnmuted) {
+            console.log(`[RUNNER RECOVERY] Recovery unmute confirmed endpoint "${defaultEp.name}" is verified unmuted.`);
+            endpointMute.isMutedByDuoAudio = false;
+            endpointMute.isRestored = true;
+
+            sendIpcMessage({
+              type: 'MUTE_FAILED',
+              endpointId: defaultEp.id,
+              endpointName: defaultEp.name,
+              originallyMuted: false,
+              muteApplied: false,
+              recoveryAttempted: true,
+              verifiedUnmuted: true,
+              restorationConfirmed: true,
+              restorationStatus: 'RESTORED',
+              error: err.message
+            });
+          } else {
+            console.warn(`[RUNNER RECOVERY] Recovery unmute failed or could not verify endpoint state: ${recoveryRes.error || 'unverified'}. Keeping restoration pending.`);
+            // Preserve endpoint ID and original baseline; keep restoration armed for shutdown or emergency
+            endpointMute.isMutedByDuoAudio = true;
+            endpointMute.isRestored = false;
+
+            sendIpcMessage({
+              type: 'MUTE_FAILED',
+              endpointId: defaultEp.id,
+              endpointName: defaultEp.name,
+              originallyMuted: false,
+              muteApplied: false,
+              recoveryAttempted: true,
+              verifiedUnmuted: false,
+              restorationConfirmed: false,
+              restorationStatus: 'UNRESOLVED',
+              error: err.message,
+              recoveryError: recoveryRes.error || 'Failed to verify unmuted state'
+            });
+          }
+
+          sendIpcMessage({
+            type: 'WARNING',
+            code: 'ENDPOINT_MUTE_FAILED',
+            message: 'Endpoint muting failed for this session. Audio sharing will continue, but Windows default speakers may also play audio.',
+            details: err.message
+          });
+        }
       }
     }
   }
@@ -370,11 +506,18 @@ async function startDualRouter(config) {
 
   updateState('PREBUFFERING');
 
+  // 6b. Initialize Diagnostic Telemetry (Phase 8.1)
+  captureTelemetry = new CaptureTelemetry();
+
   // 7. Initialize WASAPI Loopback Capture
   capture = new loopback.LoopbackCapture();
 
   function onCaptureChunk(chunk) {
     if (isShuttingDown) return;
+
+    if (captureTelemetry && captureTelemetry.enabled) {
+      captureTelemetry.recordCallback(chunk.length);
+    }
 
     // Metrics accumulation
     for (let offset = 0; offset < chunk.length; offset += 2) {
@@ -388,6 +531,10 @@ async function startDualRouter(config) {
 
     // Convert S16LE to 20 ms Float32LE output frames
     const outputFrames = converter.processChunk(chunk);
+
+    if (captureTelemetry && captureTelemetry.enabled) {
+      captureTelemetry.recordPcmFrames(outputFrames.length);
+    }
 
     // Fan-out: referentially share converted buffer across both streams
     for (let i = 0; i < outputFrames.length; i++) {
@@ -451,6 +598,24 @@ async function startDualRouter(config) {
     windowPeak = 0.0;
   }, 250);
 
+  // 8b. Periodic Diagnostic Telemetry Snapshot (Phase 8.1 - approx every 500 ms)
+  telemetryTimer = setInterval(() => {
+    if (isShuttingDown) return;
+
+    const snapshot = createTelemetrySnapshot({
+      capture: captureTelemetry,
+      stream1: stream1 ? stream1.telemetry : null,
+      stream2: stream2 ? stream2.telemetry : null,
+      stream1BufferStats: stream1 ? stream1.buffer.getStats() : null,
+      stream2BufferStats: stream2 ? stream2.buffer.getStats() : null
+    });
+
+    sendIpcMessage({
+      type: 'TELEMETRY_SNAPSHOT',
+      data: snapshot
+    });
+  }, 500);
+
   // 9. Duration timer (optional, for CLI testing)
   if (durationSec && durationSec > 0) {
     durationTimer = setTimeout(() => {
@@ -497,7 +662,7 @@ if (typeof process.on === 'function') {
     console.error('\n[RUNNER FATAL UNCAUGHT EXCEPTION]:', err.message);
     sendIpcMessage({ type: 'ERROR', error: err.message, fatal: true });
     if (endpointMute) {
-      endpointMute.restoreSync();
+      endpointMute.restoreAllSync();
     }
     process.exit(1);
   });
@@ -506,7 +671,7 @@ if (typeof process.on === 'function') {
     console.error('\n[RUNNER FATAL UNHANDLED REJECTION]:', err?.message || err);
     sendIpcMessage({ type: 'ERROR', error: err?.message || String(err), fatal: true });
     if (endpointMute) {
-      endpointMute.restoreSync();
+      endpointMute.restoreAllSync();
     }
     process.exit(1);
   });
@@ -553,8 +718,24 @@ if (cliArgs.length > 0) {
       durationSec: durationVal
     }).catch((err) => {
       console.error('[RUNNER FATAL]:', err.message);
-      if (endpointMute) endpointMute.restoreSync();
+      if (endpointMute) endpointMute.restoreAllSync();
       process.exit(1);
     });
   }
 }
+
+function getTelemetrySnapshot() {
+  return createTelemetrySnapshot({
+    capture: captureTelemetry,
+    stream1: stream1 ? stream1.telemetry : null,
+    stream2: stream2 ? stream2.telemetry : null,
+    stream1BufferStats: stream1 ? stream1.buffer.getStats() : null,
+    stream2BufferStats: stream2 ? stream2.buffer.getStats() : null
+  });
+}
+
+module.exports = {
+  startDualRouter,
+  shutdown,
+  getTelemetrySnapshot
+};

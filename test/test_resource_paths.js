@@ -38,7 +38,7 @@ function test(name, fn) {
 // Suite 1: Development Mode Resource Path Resolution
 console.log('--- Suite 1: Development Mode Resource Paths ---');
 
-const { PROJECT_ROOT, getUnpackedPath, getBundledNodePath } = require('../src/main/resource-paths');
+const { PROJECT_ROOT, getUnpackedPath, getBundledNodePath, getNativeHelperPath } = require('../src/main/resource-paths');
 
 test('PROJECT_ROOT correctly resolves to actual repository root', () => {
   assert.ok(fs.existsSync(path.join(PROJECT_ROOT, 'package.json')), 'PROJECT_ROOT must contain package.json');
@@ -64,6 +64,12 @@ test('getBundledNodePath returns null when not running in packaged mode with res
   if (!process.resourcesPath) {
     assert.strictEqual(bundled, null);
   }
+});
+
+test('getNativeHelperPath resolves to existing executable in development mode', () => {
+  const nativePath = getNativeHelperPath();
+  assert.ok(fs.existsSync(nativePath), `Native helper must exist at: ${nativePath}`);
+  assert.ok(nativePath.endsWith('duoaudio_endpoint.exe'), 'Native helper path must end with duoaudio_endpoint.exe');
 });
 
 // Suite 2: Packaged Mode Path Construction Simulation
@@ -96,6 +102,12 @@ test('Simulated packaged-mode path resolution constructs app.asar.unpacked paths
     pkgNode,
     'C:\\Program Files\\DuoAudio\\resources\\runtime\\node.exe'
   );
+
+  const pkgHelper = path.join(mockResourcesPath, 'bin', 'duoaudio_endpoint.exe');
+  assert.strictEqual(
+    pkgHelper,
+    'C:\\Program Files\\DuoAudio\\resources\\bin\\duoaudio_endpoint.exe'
+  );
 });
 
 // Suite 3: Node.js Runtime Resolution (System vs. Bundled)
@@ -119,48 +131,36 @@ test('validateNodeExecutable confirms Node 22 native addon compatibility', () =>
   assert.strictEqual(validation.error, null);
 });
 
-// Suite 4: PowerShell Endpoint Mute Script Path Resolution
-console.log('\n--- Suite 4: PowerShell Endpoint Mute Script Path Resolution ---');
+// Suite 4: Native Helper Path Resolution
+console.log('\n--- Suite 4: Native Helper Path Resolution ---');
 
-const { EndpointMuteManager } = require('../src/endpoint_mute');
+const { EndpointMuteManager, resolveDefaultNativeHelperPath } = require('../src/endpoint_mute');
 
-test('EndpointMuteManager resolves audio_endpoint.ps1 in development', () => {
+test('EndpointMuteManager resolves native helper in development', () => {
   const muteManager = new EndpointMuteManager();
-  assert.ok(fs.existsSync(muteManager.scriptPath), `Script path "${muteManager.scriptPath}" must exist on disk`);
-  assert.strictEqual(
-    muteManager.scriptPath,
-    path.resolve(PROJECT_ROOT, 'src/audio_endpoint.ps1')
-  );
+  assert.ok(fs.existsSync(muteManager.nativePath), `Native helper "${muteManager.nativePath}" must exist on disk`);
+  assert.ok(muteManager.nativePath.endsWith('duoaudio_endpoint.exe'));
 });
 
-test('EndpointMuteManager path resolution logic safely transforms app.asar into app.asar.unpacked', () => {
-  function resolvePs(dir) {
-    return path.resolve(dir.replace(/app\.asar(?=[\\/]|$)/, 'app.asar.unpacked'), 'audio_endpoint.ps1');
+test('EndpointMuteManager accepts custom nativePath override in options', () => {
+  const customPath = 'D:\\Custom\\bin\\duoaudio_endpoint.exe';
+  const muteManager = new EndpointMuteManager({ nativePath: customPath });
+  assert.strictEqual(muteManager.nativePath, customPath);
+});
+
+test('resolveDefaultNativeHelperPath respects DUOAUDIO_HELPER_PATH env override', () => {
+  const origEnv = process.env.DUOAUDIO_HELPER_PATH;
+  try {
+    const rootExe = path.resolve(PROJECT_ROOT, 'duoaudio_endpoint.exe');
+    process.env.DUOAUDIO_HELPER_PATH = rootExe;
+    assert.strictEqual(resolveDefaultNativeHelperPath(), rootExe);
+  } finally {
+    if (origEnv !== undefined) {
+      process.env.DUOAUDIO_HELPER_PATH = origEnv;
+    } else {
+      delete process.env.DUOAUDIO_HELPER_PATH;
+    }
   }
-
-  // Case 1: Development
-  assert.strictEqual(
-    resolvePs('D:\\DuoAudio\\src'),
-    'D:\\DuoAudio\\src\\audio_endpoint.ps1'
-  );
-
-  // Case 2: Packaged Electron main process (where __dirname contains app.asar)
-  assert.strictEqual(
-    resolvePs('C:\\Users\\User\\AppData\\Local\\Programs\\DuoAudio\\resources\\app.asar\\src'),
-    'C:\\Users\\User\\AppData\\Local\\Programs\\DuoAudio\\resources\\app.asar.unpacked\\src\\audio_endpoint.ps1'
-  );
-
-  // Case 3: Packaged external Node.js (where __dirname is already app.asar.unpacked)
-  assert.strictEqual(
-    resolvePs('C:\\Users\\User\\AppData\\Local\\Programs\\DuoAudio\\resources\\app.asar.unpacked\\src'),
-    'C:\\Users\\User\\AppData\\Local\\Programs\\DuoAudio\\resources\\app.asar.unpacked\\src\\audio_endpoint.ps1'
-  );
-});
-
-test('EndpointMuteManager accepts custom scriptPath override in options', () => {
-  const customPath = 'C:\\custom\\audio_endpoint.ps1';
-  const mgr = new EndpointMuteManager({ scriptPath: customPath });
-  assert.strictEqual(mgr.scriptPath, customPath);
 });
 
 // Suite 5: Isolation & Zero Electron Leaks in Runner Modules

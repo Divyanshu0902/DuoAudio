@@ -12,6 +12,7 @@
 
 const { RtAudio, RtAudioApi, RtAudioFormat } = require("audify");
 const { AudioBuffer } = require("./audio_buffer");
+const { OutputStreamTelemetry } = require("./telemetry");
 
 const SAMPLE_RATE = 48000;
 const CHANNELS = 2;
@@ -42,6 +43,11 @@ class OutputStream {
       maxCapacityMs: options.maxCapacityMs || 200,
       targetPrebufferMs: options.targetPrebufferMs || 80
     });
+
+    // Phase 8.1: Independent Diagnostic Telemetry
+    this.telemetry = options.telemetry !== false
+      ? (options.telemetry instanceof OutputStreamTelemetry ? options.telemetry : new OutputStreamTelemetry({ name: this.name }))
+      : null;
 
     this.rtAudio = null;
     this.device = null;
@@ -149,6 +155,10 @@ class OutputStream {
 
     this.buffer.push(float32Buffer);
 
+    if (this.telemetry && this.telemetry.enabled) {
+      this.telemetry.recordQueueDepth(this.buffer.length);
+    }
+
     // If pre-buffering and target threshold reached, transition to playback
     if (this.state === "PREBUFFERING" && this.buffer.isPrebuffered) {
       this._startPlayback();
@@ -168,8 +178,20 @@ class OutputStream {
       for (let i = 0; i < initialLeadFrames; i++) {
         const frame = this.buffer.pop();
         if (frame) {
+          let writeStartHr;
+          if (this.telemetry && this.telemetry.enabled) {
+            writeStartHr = process.hrtime.bigint();
+          }
+
           this.rtAudio.write(frame);
           this.submittedFrames++;
+
+          if (this.telemetry && this.telemetry.enabled) {
+            const writeEndHr = process.hrtime.bigint();
+            const durationUs = Number(writeEndHr - writeStartHr) / 1000;
+            this.telemetry.recordWriteDuration(durationUs);
+            this.telemetry.recordSubmittedFrames(1);
+          }
         }
       }
 
@@ -203,6 +225,11 @@ class OutputStream {
     this.pacerTimer = setInterval(() => {
       if (this.state !== "RUNNING" || this.isClosed || this.isError) return;
 
+      if (this.telemetry && this.telemetry.enabled) {
+        this.telemetry.recordPacerTick();
+        this.telemetry.recordQueueDepth(this.buffer.length);
+      }
+
       try {
         // Stream health check: detect unexpected stream termination or driver invalidation
         if (!this.rtAudio.isStreamRunning()) {
@@ -227,8 +254,20 @@ class OutputStream {
           const frame = this.buffer.pop();
           if (frame) {
             try {
+              let writeStartHr;
+              if (this.telemetry && this.telemetry.enabled) {
+                writeStartHr = process.hrtime.bigint();
+              }
+
               this.rtAudio.write(frame);
               this.submittedFrames++;
+
+              if (this.telemetry && this.telemetry.enabled) {
+                const writeEndHr = process.hrtime.bigint();
+                const durationUs = Number(writeEndHr - writeStartHr) / 1000;
+                this.telemetry.recordWriteDuration(durationUs);
+                this.telemetry.recordSubmittedFrames(1);
+              }
             } catch (writeErr) {
               this._handleFailure(writeErr, "synchronous write");
               return;
@@ -236,9 +275,12 @@ class OutputStream {
           }
         }
 
-        // Track underrun ticks (pacer wanted to write to maintain lead, but queue was dry)
+        // Track empty queue ticks (pacer wanted to write to maintain lead, but queue was dry)
         if (this.submittedFrames < targetSubmitted && this.buffer.length === 0) {
           this.underrunTicks++;
+          if (this.telemetry && this.telemetry.enabled) {
+            this.telemetry.recordEmptyQueueTick();
+          }
         }
       } catch (err) {
         this._handleFailure(err, "pacer tick");
@@ -338,7 +380,8 @@ class OutputStream {
       submittedFrames: this.submittedFrames,
       audioSecondsPlayed: (this.submittedFrames * 0.02).toFixed(2),
       underrunTicks: this.underrunTicks,
-      queue: bufferStats
+      queue: bufferStats,
+      telemetry: this.telemetry && this.telemetry.enabled ? this.telemetry.getSnapshot(bufferStats) : null
     };
   }
 }

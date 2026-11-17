@@ -12,6 +12,7 @@
 
 const { app } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../');
 
@@ -43,8 +44,27 @@ function getBundledNodePath() {
   return null;
 }
 
+/**
+ * Returns the absolute path to the native Windows audio endpoint helper executable.
+ * In development: resolves from the project root (or resources/bin if staged).
+ * In packaged mode: resolves from process.resourcesPath/bin/duoaudio_endpoint.exe.
+ *
+ * @returns {string} Absolute on-disk path to duoaudio_endpoint.exe
+ */
+function getNativeHelperPath() {
+  if (app && app.isPackaged && process.resourcesPath) {
+    return path.join(process.resourcesPath, 'bin', 'duoaudio_endpoint.exe');
+  }
+  const rootExe = path.resolve(PROJECT_ROOT, 'duoaudio_endpoint.exe');
+  if (fs.existsSync(rootExe)) {
+    return rootExe;
+  }
+  return path.resolve(PROJECT_ROOT, 'resources', 'bin', 'duoaudio_endpoint.exe');
+}
+
 module.exports = {
   PROJECT_ROOT,
   getUnpackedPath,
-  getBundledNodePath
+  getBundledNodePath,
+  getNativeHelperPath
 };

@@ -30,6 +30,12 @@ class AudioBuffer {
     this.totalPopped = 0;
     this.droppedBuffers = 0;
     this.overflowCount = 0;
+
+    // Phase 8.1: Observational Queue Depth Telemetry
+    this.minQueueLength = Infinity;
+    this.maxQueueLength = 0;
+    this.queueDepthSum = 0;
+    this.queueDepthSamples = 0;
   }
 
   /**
@@ -51,6 +57,14 @@ class AudioBuffer {
 
     this.queue.push(buffer);
     this.totalPushed++;
+
+    // Track queue depth observation
+    const len = this.queue.length;
+    if (len > this.maxQueueLength) this.maxQueueLength = len;
+    if (len < this.minQueueLength) this.minQueueLength = len;
+    this.queueDepthSum += len;
+    this.queueDepthSamples++;
+
     return !droppedOldest;
   }
 
@@ -64,7 +78,16 @@ class AudioBuffer {
       return null;
     }
     this.totalPopped++;
-    return this.queue.shift();
+    const item = this.queue.shift();
+
+    // Track queue depth observation
+    const len = this.queue.length;
+    if (len < this.minQueueLength) this.minQueueLength = len;
+    if (len > this.maxQueueLength) this.maxQueueLength = len;
+    this.queueDepthSum += len;
+    this.queueDepthSamples++;
+
+    return item;
   }
 
   /**
@@ -93,15 +116,27 @@ class AudioBuffer {
    */
   clear() {
     this.queue = [];
+    this.minQueueLength = Infinity;
+    this.maxQueueLength = 0;
+    this.queueDepthSum = 0;
+    this.queueDepthSamples = 0;
   }
 
   /**
    * Returns snapshot of buffer diagnostics.
    */
   getStats() {
+    const curLen = this.queue.length;
+    const minLen = isFinite(this.minQueueLength) ? this.minQueueLength : curLen;
     return {
-      queuedBuffers: this.queue.length,
+      queuedBuffers: curLen,
       queuedMs: this.durationMs,
+      minQueueBuffers: minLen,
+      maxQueueBuffers: this.maxQueueLength,
+      avgQueueBuffers: this.queueDepthSamples > 0 ? Number((this.queueDepthSum / this.queueDepthSamples).toFixed(2)) : curLen,
+      minQueueMs: minLen * this.frameDurationMs,
+      maxQueueMs: this.maxQueueLength * this.frameDurationMs,
+      avgQueueMs: Number(((this.queueDepthSamples > 0 ? this.queueDepthSum / this.queueDepthSamples : curLen) * this.frameDurationMs).toFixed(1)),
       maxCapacityMs: this.maxCapacityMs,
       targetPrebufferMs: this.targetPrebufferMs,
       totalPushed: this.totalPushed,

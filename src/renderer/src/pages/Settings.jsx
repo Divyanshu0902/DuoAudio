@@ -25,6 +25,16 @@ export function Settings({ onBack }) {
           <div className="settings-card">
             <div className="settings-row">
               <div className="settings-row-text">
+                <span className="settings-item-title">Automatic default device management</span>
+                <span className="settings-item-desc">
+                  Sets built-in Laptop Speakers as Windows default output while sharing audio to eliminate setup overhead and prevent echo; restores your original device when stopped.
+                </span>
+              </div>
+              <span className="settings-badge">Active</span>
+            </div>
+            <div className="settings-divider" />
+            <div className="settings-row">
+              <div className="settings-row-text">
                 <span className="settings-item-title">Automatic speaker muting</span>
                 <span className="settings-item-desc">
                   Mutes Windows default playback endpoint during active routing; restores original state on exit.

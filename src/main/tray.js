@@ -5,12 +5,13 @@
  * and the exact 4-item context menu required by the product specification.
  */
 
-const { Tray, Menu, app } = require('electron');
+const { Tray, Menu, app, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { lifecycle } = require('./lifecycle');
 const { audioService } = require('./audio-service');
 const { IPC_CHANNELS } = require('../shared/ipc-contracts');
+const { getUnpackedPath } = require('./resource-paths');
 
 /**
  * Creates and configures the system tray instance.
@@ -18,12 +19,13 @@ const { IPC_CHANNELS } = require('../shared/ipc-contracts');
  * @returns {Tray}
  */
 function createSystemTray(mainWindow) {
-  const iconPath = path.join(__dirname, '../../assets/tray-icon.png');
+  const iconPath = getUnpackedPath('assets/tray-icon.png');
   if (!fs.existsSync(iconPath)) {
     console.warn('[TRAY WARNING] Tray icon asset not found at:', iconPath);
   }
 
-  const tray = new Tray(iconPath);
+  const icon = nativeImage.createFromPath(iconPath);
+  const tray = new Tray(icon.isEmpty() ? iconPath : icon);
   tray.setToolTip('DuoAudio');
 
   // Function to always restore and focus window (never toggles/hides)

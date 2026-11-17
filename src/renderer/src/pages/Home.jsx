@@ -14,6 +14,7 @@ export function Home() {
 
   // Unobtrusive user feedback notice
   const [feedbackNotice, setFeedbackNotice] = useState(null);
+  const dismissedWarningRef = useRef(null);
 
   // Routing state machine: IDLE, STARTING, PREBUFFERING, RUNNING, PARTIALLY_DEGRADED, STOPPING, STOPPED, ERROR
   const [routingState, setRoutingState] = useState('IDLE');
@@ -148,6 +149,18 @@ export function Home() {
         const nextState = status.state || 'IDLE';
         setRoutingState(nextState);
 
+        // Display structured non-fatal warnings (e.g. endpoint mute unavailable)
+        if (status.warning) {
+          const warningKey = status.warning.code || status.warning.message || String(status.warning);
+          if (dismissedWarningRef.current !== warningKey) {
+            setFeedbackNotice({
+              type: 'warning',
+              message: status.warning.message || status.warning,
+              warningKey
+            });
+          }
+        }
+
         if (nextState === 'PARTIALLY_DEGRADED') {
           const slot = status.failedSlot || (status.error?.includes('output1') ? 'output1' : 'output2');
           setDegradedSlot(slot);
@@ -171,7 +184,7 @@ export function Home() {
           if (status.muteState && status.muteState.unresolved) {
             setFeedbackNotice({
               type: 'warning',
-              message: `Warning: "${status.muteState.endpointName || 'Default Audio Device'}" was disconnected while muted. When reconnected, it may remain muted in Windows until unmuted in Windows Settings.`
+              message: `Warning: "${status.muteState.endpointName || 'Default Audio Device'}" could not be confirmed unmuted. It may remain muted in Windows until unmuted in Windows Settings.`
             });
           }
         }
@@ -248,6 +261,7 @@ export function Home() {
 
     setIsSubmitting(true);
     setFeedbackNotice(null);
+    dismissedWarningRef.current = null;
 
     try {
       const payload = {
@@ -327,6 +341,13 @@ export function Home() {
   const isStartDisabled = !selectedDevice1Id || !selectedDevice2Id || selectedDevice1Id === selectedDevice2Id || isLoading || isBusy;
   const isButtonDisabled = isStopAction ? isBusy : isStartDisabled;
 
+  const handleDismissNotice = () => {
+    if (feedbackNotice?.warningKey) {
+      dismissedWarningRef.current = feedbackNotice.warningKey;
+    }
+    setFeedbackNotice(null);
+  };
+
   const handlePrimaryButtonClick = () => {
     if (isStopAction) {
       handleStopSharing();
@@ -403,7 +424,7 @@ export function Home() {
             <button
               type="button"
               className="feedback-notice-close"
-              onClick={() => setFeedbackNotice(null)}
+              onClick={handleDismissNotice}
               aria-label="Dismiss notice"
             >
               &times;

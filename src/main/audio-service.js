@@ -63,7 +63,9 @@ class AudioService {
     this._hasDefaultConflict = false;
     this._conflictingDevice = null;
     this._lastError = null;
+    this._warning = null;
     this._latestMetrics = null;
+    this._latestTelemetry = null;
 
     // Granular Mute State Machine
     this._muteState = {
@@ -77,6 +79,20 @@ class AudioService {
       restorationAttempted: false,
       restorationConfirmed: false,
       restorationStatus: 'IDLE', // 'IDLE', 'RESTORED', 'NOT_REQUIRED', 'SKIPPED', 'FAILED'
+      restorationError: null
+    };
+
+    // Granular Default Endpoint State Machine (Zero-Config Audio Routing)
+    this._defaultEndpointState = {
+      baselineReceived: false,
+      originalEndpointId: null,
+      originalEndpointName: null,
+      targetEndpointId: null,
+      targetEndpointName: null,
+      switched: false,
+      restorationAttempted: false,
+      restorationConfirmed: false,
+      restorationStatus: 'IDLE', // 'IDLE', 'PENDING', 'RESTORED', 'NOT_REQUIRED', 'SKIPPED', 'FAILED'
       restorationError: null
     };
 
@@ -169,9 +185,15 @@ class AudioService {
    */
   getRoutingStatus() {
     const isUnresolved = Boolean(
-      this._muteState.willMute &&
+      this._muteState.baselineReceived &&
       this._muteState.originallyMuted === false &&
-      (this._muteState.restorationStatus === 'SKIPPED' || (!this._muteState.restorationConfirmed && this._muteState.muteApplied))
+      !this._muteState.restorationConfirmed &&
+      (
+        this._muteState.restorationStatus === 'UNRESOLVED' ||
+        this._muteState.restorationStatus === 'FAILED' ||
+        (this._muteState.restorationStatus === 'SKIPPED' && this._muteState.muteApplied) ||
+        (this._muteState.muteApplied && !this._muteState.restorationConfirmed)
+      )
     );
 
     return {
@@ -182,7 +204,9 @@ class AudioService {
       hasDefaultConflict: this._hasDefaultConflict,
       conflictingDevice: this._conflictingDevice,
       metrics: this._latestMetrics,
+      telemetry: this._latestTelemetry,
       error: this._lastError,
+      warning: this._warning,
       muteState: {
         baselineReceived: this._muteState.baselineReceived,
         endpointId: this._muteState.endpointId,
@@ -197,8 +221,27 @@ class AudioService {
         restorationError: this._muteState.restorationError,
         isMutedByDuoAudio: this._muteState.muteApplied && !this._muteState.restorationConfirmed,
         unresolved: isUnresolved
+      },
+      defaultEndpointState: {
+        baselineReceived: this._defaultEndpointState.baselineReceived,
+        originalEndpointId: this._defaultEndpointState.originalEndpointId,
+        originalEndpointName: this._defaultEndpointState.originalEndpointName,
+        targetEndpointId: this._defaultEndpointState.targetEndpointId,
+        targetEndpointName: this._defaultEndpointState.targetEndpointName,
+        switched: this._defaultEndpointState.switched,
+        restorationConfirmed: this._defaultEndpointState.restorationConfirmed,
+        restorationStatus: this._defaultEndpointState.restorationStatus,
+        restorationError: this._defaultEndpointState.restorationError
       }
     };
+  }
+
+  /**
+   * Returns latest diagnostic telemetry snapshot from the audio runner.
+   * @returns {Object|null}
+   */
+  getTelemetrySnapshot() {
+    return this._latestTelemetry;
   }
 
   /**
@@ -275,7 +318,8 @@ class AudioService {
       dev1,
       dev2,
       hasConflict,
-      conflictingDev
+      conflictingDev,
+      autoResolvable: true
     };
   }
 
@@ -323,7 +367,9 @@ class AudioService {
     }
 
     this._lastError = null;
+    this._warning = null;
     this._latestMetrics = null;
+    this._latestTelemetry = null;
 
     // Reset mute state machine for new session
     this._muteState = {
@@ -420,6 +466,7 @@ class AudioService {
 
       // Capture active child reference
       const currentChild = childProcess;
+      currentChild._childError = null;
       this._child = childProcess;
 
       // Capture stdout / stderr for diagnostics
@@ -485,9 +532,11 @@ class AudioService {
         const needsEmergencyRestoration = (
           this._muteState.baselineReceived &&
           this._muteState.originallyMuted === false &&
-          this._muteState.willMute === true &&
+          Boolean(this._muteState.endpointId) &&
           !this._muteState.restorationConfirmed &&
-          this._muteState.restorationStatus !== 'SKIPPED'
+          this._muteState.restorationStatus !== 'SKIPPED' &&
+          this._muteState.restorationStatus !== 'NOT_REQUIRED' &&
+          (this._muteState.muteApplied === true || this._muteState.restorationStatus === 'UNRESOLVED' || this._muteState.restorationStatus === 'FAILED' || this._muteState.willMute === true)
         );
 
         if (needsEmergencyRestoration && this._muteState.endpointId) {
@@ -503,7 +552,7 @@ class AudioService {
               // Endpoint is disconnected. If it was originally muted, restoration was not needed.
               // If it was originally unmuted and muted by DuoAudio, restoration could not be applied.
               // Never overwrite SKIPPED with RESTORED!
-              if (this._muteState.originallyMuted === true || !this._muteState.willMute) {
+              if (this._muteState.originallyMuted === true) {
                 this._muteState.restorationConfirmed = true;
                 this._muteState.restorationStatus = 'SKIPPED';
               } else {
@@ -528,6 +577,31 @@ class AudioService {
           }
         }
 
+        // Emergency Default Endpoint Restoration if switched and unconfirmed
+        if (this._defaultEndpointState.switched && !this._defaultEndpointState.restorationConfirmed && this._defaultEndpointState.originalEndpointId) {
+          console.warn(`[AUDIO-SERVICE] Emergency default endpoint restoration triggered for "${this._defaultEndpointState.originalEndpointName}" (${this._defaultEndpointState.originalEndpointId})...`);
+          this._defaultEndpointState.restorationAttempted = true;
+          try {
+            const defRes = await this._deps.muteManagerClass.restoreDefaultEndpointById(this._defaultEndpointState.originalEndpointId);
+            if (defRes.restored || defRes.status === 'RESTORED' || defRes.status === 'NOT_REQUIRED') {
+              this._defaultEndpointState.restorationConfirmed = true;
+              this._defaultEndpointState.restorationStatus = 'RESTORED';
+              this._defaultEndpointState.switched = false;
+              console.log('[AUDIO-SERVICE] Emergency default endpoint restoration completed successfully.');
+            } else {
+              this._defaultEndpointState.restorationConfirmed = false;
+              this._defaultEndpointState.restorationStatus = 'FAILED';
+              this._defaultEndpointState.restorationError = defRes.error || 'Emergency default restoration failed';
+              console.error('[AUDIO-SERVICE] Emergency default endpoint restoration failed:', this._defaultEndpointState.restorationError);
+            }
+          } catch (defErr) {
+            this._defaultEndpointState.restorationConfirmed = false;
+            this._defaultEndpointState.restorationStatus = 'FAILED';
+            this._defaultEndpointState.restorationError = defErr.message;
+            console.error('[AUDIO-SERVICE] Emergency default endpoint restoration threw error:', defErr.message);
+          }
+        }
+
         // Child process has officially terminated; only NOW do we clear this._child
         this._child = null;
 
@@ -540,13 +614,17 @@ class AudioService {
         } else if (!wasExpectedStop) {
           const exitErr = `Audio child process terminated unexpectedly (code: ${code}, signal: ${signal}).`;
           console.error(`[AUDIO-SERVICE] ${exitErr}`);
-          this._lastError = exitErr;
-          this._setState('ERROR', { error: exitErr });
-          safeResolve({ success: false, state: 'ERROR', error: exitErr });
+          // Preserve structured ERROR received from the audio child during this startup/session
+          const errorToReport = currentChild._childError || this._lastError || exitErr;
+          this._lastError = errorToReport;
+          this._setState('ERROR', { error: errorToReport });
+          safeResolve({ success: false, state: 'ERROR', error: errorToReport });
         } else {
           if (this._state === 'ERROR' && currentChild._stopRequested) {
             console.log('[AUDIO-SERVICE] Child process eventually exited after termination timeout. Reconciled state to STOPPED.');
           }
+          this._lastError = null;
+          this._warning = null;
           this._setState('STOPPED');
         }
 
@@ -562,6 +640,7 @@ class AudioService {
       childProcess.on('error', (err) => {
         console.error('[AUDIO-SERVICE] Child process spawn error:', err.message);
         clearTimeout(startTimeoutTimer);
+        currentChild._childError = err.message;
         this._lastError = err.message;
         this._setState('ERROR', { error: err.message });
         safeResolve({ success: false, state: 'ERROR', error: err.message });
@@ -623,6 +702,40 @@ class AudioService {
         break;
       }
 
+      case 'MUTE_FAILED': {
+        console.warn(`[AUDIO-SERVICE] Child reported mute operation failure for endpoint "${msg.endpointId}": ${msg.error || msg.reason}`);
+        this._muteState.muteAttempted = true;
+        this._muteState.muteApplied = Boolean(msg.muteApplied);
+        if (msg.endpointId) this._muteState.endpointId = msg.endpointId;
+        if (msg.endpointName) this._muteState.endpointName = msg.endpointName;
+        if (msg.originallyMuted !== undefined) this._muteState.originallyMuted = Boolean(msg.originallyMuted);
+
+        if (msg.verifiedUnmuted) {
+          this._muteState.restorationConfirmed = true;
+          this._muteState.restorationStatus = 'RESTORED';
+          this._muteState.restorationError = null;
+          console.log(`[AUDIO-SERVICE] Recovery unmute confirmed endpoint "${msg.endpointId}" is unmuted.`);
+        } else {
+          this._muteState.restorationConfirmed = false;
+          this._muteState.restorationStatus = 'UNRESOLVED';
+          this._muteState.restorationError = msg.recoveryError || msg.error || 'Endpoint mute state unverified after failure';
+          console.warn(`[AUDIO-SERVICE] Recovery unmute unverified for endpoint "${msg.endpointId}". Endpoint marked UNRESOLVED.`);
+        }
+        this._notifyStatusChanged();
+        break;
+      }
+
+      case 'WARNING': {
+        console.warn(`[AUDIO-SERVICE] Child process reported warning: [${msg.code || 'WARNING'}] ${msg.message}`);
+        this._warning = {
+          code: msg.code || 'WARNING',
+          message: msg.message || 'Warning received from audio runner',
+          details: msg.details || null
+        };
+        this._notifyStatusChanged();
+        break;
+      }
+
       case 'MUTE_RESTORATION_RESULT': {
         this._muteState.restorationAttempted = true;
         this._muteState.restorationStatus = msg.status;
@@ -633,18 +746,48 @@ class AudioService {
           console.log(`[AUDIO-SERVICE] Mute restoration confirmed with status "${msg.status}".`);
         } else if (msg.status === 'SKIPPED') {
           // If the endpoint was already muted before routing, no restoration was needed (confirmed safe).
-          // If DuoAudio muted an originally unmuted endpoint, restoration is UNRESOLVED.
-          if (this._muteState.originallyMuted === true || !this._muteState.willMute) {
+          // If DuoAudio attempted to mute an originally unmuted endpoint, restoration is UNRESOLVED.
+          if (this._muteState.originallyMuted === true) {
             this._muteState.restorationConfirmed = true;
             console.log('[AUDIO-SERVICE] Mute restoration skipped: endpoint was originally muted (confirmed safe).');
           } else {
             this._muteState.restorationConfirmed = false;
-            console.warn('[AUDIO-SERVICE] Mute restoration skipped: endpoint disconnected before unmuting (unresolved).');
+            this._muteState.restorationStatus = 'SKIPPED';
+            console.warn('[AUDIO-SERVICE] Mute restoration skipped: endpoint was originally unmuted and state remains unresolved.');
           }
         } else {
           this._muteState.restorationConfirmed = false;
           console.error(`[AUDIO-SERVICE] Child reported mute restoration failure: ${msg.error}`);
         }
+        break;
+      }
+
+      case 'DEFAULT_ENDPOINT_BASELINE': {
+        this._defaultEndpointState.baselineReceived = true;
+        this._defaultEndpointState.originalEndpointId = msg.originalEndpointId;
+        this._defaultEndpointState.originalEndpointName = msg.originalEndpointName;
+        this._defaultEndpointState.targetEndpointId = msg.targetEndpointId;
+        this._defaultEndpointState.targetEndpointName = msg.targetEndpointName;
+        this._defaultEndpointState.switched = true;
+        this._defaultEndpointState.restorationConfirmed = false;
+        this._defaultEndpointState.restorationStatus = 'PENDING';
+        console.log(`[AUDIO-SERVICE] Default endpoint baseline recorded: original="${msg.originalEndpointName}", switched to="${msg.targetEndpointName}"`);
+        break;
+      }
+
+      case 'DEFAULT_ENDPOINT_RESTORATION_RESULT': {
+        this._defaultEndpointState.restorationAttempted = true;
+        this._defaultEndpointState.restorationStatus = msg.status;
+        this._defaultEndpointState.restorationError = msg.error || null;
+        if (msg.status === 'RESTORED' || msg.status === 'NOT_REQUIRED') {
+          this._defaultEndpointState.restorationConfirmed = true;
+          this._defaultEndpointState.switched = false;
+          console.log(`[AUDIO-SERVICE] Default endpoint restoration confirmed for "${this._defaultEndpointState.originalEndpointName}".`);
+        } else {
+          this._defaultEndpointState.restorationConfirmed = false;
+          console.error(`[AUDIO-SERVICE] Default endpoint restoration failed for "${this._defaultEndpointState.originalEndpointName}":`, msg.error);
+        }
+        this._notifyStatusChanged();
         break;
       }
 
@@ -668,6 +811,12 @@ class AudioService {
         break;
       }
 
+      case 'TELEMETRY_SNAPSHOT': {
+        this._latestTelemetry = msg.data || null;
+        this._notifyStatusChanged();
+        break;
+      }
+
       case 'STREAM_FAILED': {
         const errorMsg = `Stream on ${msg.slot} failed: ${msg.error}`;
         console.warn(`[AUDIO-SERVICE] ${errorMsg}`);
@@ -684,6 +833,9 @@ class AudioService {
 
       case 'ERROR': {
         console.error(`[AUDIO-SERVICE] Child process reported error: ${msg.error}`);
+        if (childProcess) {
+          childProcess._childError = msg.error;
+        }
         this._lastError = msg.error;
         this._setState('ERROR', { error: msg.error });
         if (onStateCallback) onStateCallback({ state: 'ERROR', error: msg.error });

@@ -19,42 +19,48 @@ async function runMuteLifecycleTest() {
 
   const manager = new EndpointMuteManager();
 
-  // Test 1: Query & Mute
-  console.log("Test 1: Pre-flight query and mute...");
-  const initResult = await manager.initAndMute();
-  console.log("Init result:", initResult);
+  try {
+    // Test 1: Query & Mute
+    console.log("Test 1: Pre-flight query and mute...");
+    const initResult = await manager.initAndMute();
+    console.log("Init result:", initResult);
 
-  if (!manager.targetEndpoint || !manager.targetEndpoint.id) {
-    throw new Error("Failed to capture target endpoint ID.");
-  }
+    if (!manager.targetEndpoint || !manager.targetEndpoint.id) {
+      throw new Error("Failed to capture target endpoint ID.");
+    }
 
-  // Test 2: Double Mute attempt (already muted by DuoAudio)
-  console.log("\nTest 2: Verifying endpoint is currently muted...");
-  const verifyRes = await manager._runPsAsync(["get-by-id", manager.targetEndpoint.id]);
-  console.log("Verify result:", verifyRes);
-  if (!verifyRes.isMuted) {
-    throw new Error("Endpoint was expected to be muted, but is unmuted!");
-  }
+    // Test 2: Double Mute attempt (already muted by DuoAudio)
+    console.log("\nTest 2: Verifying endpoint is currently muted...");
+    const verifyRes = await manager._runAsync(["get-by-id", manager.targetEndpoint.id]);
+    console.log("Verify result:", verifyRes);
+    if (!verifyRes.isMuted) {
+      throw new Error("Endpoint was expected to be muted, but is unmuted!");
+    }
 
-  // Test 3: Normal Restoration
-  console.log("\nTest 3: Restoring original state...");
-  const restoreResult = await manager.restore();
-  console.log("Restore result:", restoreResult);
+    // Test 3: Normal Restoration
+    console.log("\nTest 3: Restoring original state...");
+    const restoreResult = await manager.restore();
+    console.log("Restore result:", restoreResult);
 
-  // Test 4: Verifying unmuted
-  console.log("\nTest 4: Verifying endpoint is restored to unmuted...");
-  const verifyRestore = await manager._runPsAsync(["get-by-id", manager.targetEndpoint.id]);
-  console.log("Post-restore status:", verifyRestore);
-  if (verifyRestore.isMuted) {
-    throw new Error("Endpoint is still muted after restore!");
-  }
+    // Test 4: Verifying unmuted
+    console.log("\nTest 4: Verifying endpoint is restored to unmuted...");
+    const verifyRestore = await manager._runAsync(["get-by-id", manager.targetEndpoint.id]);
+    console.log("Post-restore status:", verifyRestore);
+    if (verifyRestore.isMuted) {
+      throw new Error("Endpoint is still muted after restore!");
+    }
 
-  // Test 5: Idempotent duplicate restore call
-  console.log("\nTest 5: Duplicate restore call (idempotency check)...");
-  const dupRestore = await manager.restore();
-  console.log("Duplicate restore result:", dupRestore);
-  if (!dupRestore.skipped) {
-    throw new Error("Duplicate restore should have been skipped!");
+    // Test 5: Idempotent duplicate restore call
+    console.log("\nTest 5: Duplicate restore call (idempotency check)...");
+    const dupRestore = await manager.restore();
+    console.log("Duplicate restore result:", dupRestore);
+    if (!dupRestore.skipped) {
+      throw new Error("Duplicate restore should have been skipped!");
+    }
+  } finally {
+    if (manager.isMutedByDuoAudio) {
+      await manager.restore();
+    }
   }
 
   // Test 6: Disconnected device ID handling

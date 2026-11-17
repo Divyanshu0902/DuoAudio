@@ -1,6 +1,6 @@
 {
   "name": "duoaudio",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Windows audio duplication utility",
   "main": "src/main/main.js",
   "scripts": {
@@ -15,12 +15,15 @@
     "test:simultaneous": "node src/simultaneous_playback.js",
     "test:capture": "node src/system_capture.js",
     "test:routing": "node src/audio_router.js",
-    "test:routing:dual": "node src/route-dual.js"
+    "test:routing:dual": "node src/route-dual.js",
+    "postinstall": "node scripts/patch-loopback-capture.js"
   },
   "author": "DuoAudio Contributors",
   "license": "MIT",
   "dependencies": {
     "audify": "^1.10.1",
+    "bindings": "^1.5.0",
+    "file-uri-to-path": "^1.0.0",
     "loopback-capture": "^4.0.0"
   },
   "devDependencies": {
@@ -35,11 +38,21 @@
     "appId": "com.duoaudio.desktop",
     "productName": "DuoAudio",
     "directories": {
-      "output": "dist/build"
+      "output": "dist/releases/v1.0.2"
     },
     "npmRebuild": false,
     "buildDependenciesFromSource": false,
     "asar": true,
+    "extraResources": [
+      {
+        "from": "resources/runtime/node.exe",
+        "to": "runtime/node.exe"
+      },
+      {
+        "from": "resources/bin/duoaudio_endpoint.exe",
+        "to": "bin/duoaudio_endpoint.exe"
+      }
+    ],
     "asarUnpack": [
       "**/node_modules/audify/**",
       "**/node_modules/loopback-capture/**",
@@ -49,9 +62,10 @@
       "**/src/output_stream.js",
       "**/src/pcm_converter.js",
       "**/src/audio_buffer.js",
+      "**/src/telemetry.js",
       "**/src/endpoint_mute.js",
-      "**/src/audio_endpoint.ps1",
-      "**/src/main/enumerate-worker.js"
+      "**/src/main/enumerate-worker.js",
+      "**/assets/**"
     ],
     "files": [
       "dist/renderer/**/*",
@@ -62,12 +76,13 @@
       "src/output_stream.js",
       "src/pcm_converter.js",
       "src/audio_buffer.js",
+      "src/telemetry.js",
       "src/endpoint_mute.js",
-      "src/audio_endpoint.ps1",
       "assets/**/*",
       "package.json"
     ],
     "win": {
+      "icon": "assets/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -83,7 +98,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "DuoAudio"
+      "shortcutName": "DuoAudio",
+      "artifactName": "${productName} Setup ${version}.${ext}"
     }
   }
 }

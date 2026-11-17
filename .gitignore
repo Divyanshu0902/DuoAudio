@@ -4,4 +4,9 @@ AGENTS.md
 README.md
 node_modules/
 
+# Build artifacts & distributions
+dist/
+*.exe
+resources/runtime/
+
 

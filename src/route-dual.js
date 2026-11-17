@@ -22,6 +22,7 @@ const { RtAudio, RtAudioApi } = require("audify");
 const { PcmConverter, SAMPLE_RATE, CHANNELS } = require("./pcm_converter");
 const { OutputStream } = require("./output_stream");
 const { EndpointMuteManager } = require("./endpoint_mute");
+const { CaptureTelemetry } = require("./telemetry");
 
 // Parse CLI arguments:
 // node src/route-dual.js [durationSec] [--device1 <nameOrId>] [--device2 <nameOrId>] [--vol1 <0.0-1.0>] [--vol2 <0.0-1.0>] [--allow-conflict] [--no-mute]
@@ -235,36 +236,37 @@ async function runDualRouter() {
   console.log(`  >>> Output 1 Destination : [#${dev1.id}] "${dev1.name}"`);
   console.log(`  >>> Output 2 Destination : [#${dev2.id}] "${dev2.name}"\n`);
 
-  // Step 3: Default-Output Conflict Detection
-  const hasConflictDev1 = dev1.id === defaultOutputId || dev1.isDefaultOutput;
-  const hasConflictDev2 = dev2.id === defaultOutputId || dev2.isDefaultOutput;
+  // Step 3: Automatic Default-Output Conflict Resolution (Zero-Config Routing)
+  console.log("Step 3: Checking Windows default output configuration...");
+  let activeDefault = null;
+  try {
+    activeDefault = await endpointMute.queryDefault();
+  } catch (err) {
+    console.warn("  [WARNING] Could not query default audio endpoint:", err.message);
+  }
 
-  if (hasConflictDev1 || hasConflictDev2) {
-    const conflicting = hasConflictDev1 ? dev1 : dev2;
+  const allCoreEndpoints = await endpointMute.listEndpoints();
+  const builtInSpeaker = endpointMute.identifyBuiltInSpeakers(allCoreEndpoints);
+
+  if (builtInSpeaker && activeDefault && activeDefault.id !== builtInSpeaker.id) {
     console.log("======================================================================");
-    console.log(" [WARNING: DEFAULT OUTPUT CONFLICT DETECTED]");
-    console.log(` Destination device "${conflicting.name}" (ID: ${conflicting.id})`);
-    console.log(" is currently configured as the active Windows Default Playback Endpoint.");
-    console.log("");
-    console.log(" EXPLANATION:");
-    console.log(" Windows directly routes audio from applications to the default endpoint.");
-    console.log(" Routing captured loopback audio back into the default endpoint causes");
-    console.log(" duplicate audio playback (echo) with an offset of ~50 ms.");
-    console.log("");
-    console.log(" RECOMMENDED ACTION:");
-    console.log(" 1. Open Windows Sound Settings (ms-settings:sound).");
-    console.log(" 2. Set your built-in PC speakers (e.g., 'Speaker (Realtek(R) Audio)')");
-    console.log("    as the Windows Default Output device.");
-    console.log(" 3. Re-run DuoAudio. Loopback capture will tap the system audio mix,");
-    console.log("    and both earbuds will reproduce clean, duplicate-free audio.");
+    console.log(" [AUTO-CONFIG: ZERO-CONFIG DEFAULT OUTPUT RESOLUTION]");
+    console.log(` Active Windows default device is currently: "${activeDefault.name}"`);
+    console.log(` Automatically switching Windows default output to: "${builtInSpeaker.name}"`);
+    console.log(" (This prevents loopback echo and accidental earbud muting.");
+    console.log("  Your original default device will be automatically restored on exit.)");
     console.log("======================================================================\n");
 
-    if (!allowConflict) {
-      console.log("  [NOTICE] Continuing with conflict warning logged. Use --allow-conflict to suppress this notice.\n");
+    try {
+      endpointMute.originalDefaultEndpoint = { id: activeDefault.id, name: activeDefault.name };
+      await endpointMute.setDefaultEndpoint(builtInSpeaker.id);
+      endpointMute.defaultSwitchedByDuoAudio = true;
+      console.log(`  [+] Windows Default Output successfully set to: "${builtInSpeaker.name}".\n`);
+    } catch (switchErr) {
+      console.warn(`  [!] Could not switch default endpoint automatically: ${switchErr.message}\n`);
     }
   } else {
-    console.log("Step 3: Pre-flight default-output conflict check passed.");
-    console.log(`  Windows Default Output is Device ID: ${defaultOutputId} (Neither destination conflicts).\n`);
+    console.log(`  [+] Windows Default Output is already set to built-in speaker "${builtInSpeaker ? builtInSpeaker.name : 'Speaker'}". No change required.\n`);
   }
 
   // Step 4: Automatic Default Render Endpoint Mute Management (Phase 4C.1)
@@ -375,10 +377,13 @@ async function runDualRouter() {
 
   const startTime = Date.now();
   let isShuttingDown = false;
+  const captureTelemetry = new CaptureTelemetry();
 
   // Shared Capture Ingestion & Fan-Out Callback
   function onCaptureChunk(chunk) {
     if (isShuttingDown) return;
+
+    captureTelemetry.recordCallback(chunk.length);
 
     totalCaptureCallbacks++;
     totalCaptureBytes += chunk.length;
@@ -408,6 +413,7 @@ async function runDualRouter() {
 
     // Convert S16LE chunks into standard 20 ms Float32 output frames
     const outputFrames = converter.processChunk(chunk);
+    captureTelemetry.recordPcmFrames(outputFrames.length);
 
     // Fan-out: referentially share the converted Float32 Buffer across both streams
     for (let i = 0; i < outputFrames.length; i++) {
@@ -453,11 +459,21 @@ async function runDualRouter() {
       console.error("  Error closing Output 2:", err.message);
     }
 
-    // 3. Restore default playback endpoint mute state
+    // 3. Restore default playback endpoint mute state & original default device
     try {
       await endpointMute.restore();
     } catch (err) {
       console.error("  Error restoring default endpoint mute state:", err.message);
+    }
+
+    if (endpointMute.defaultSwitchedByDuoAudio) {
+      try {
+        console.log(`  Restoring Windows default playback device to "${endpointMute.originalDefaultEndpoint?.name}"...`);
+        await endpointMute.restoreDefaultEndpoint();
+        console.log(`  Windows default playback device restored cleanly.`);
+      } catch (err) {
+        console.error("  Error restoring original default playback device:", err.message);
+      }
     }
 
     // 4. Print Comprehensive Dual-Output Routing Final Report
@@ -481,20 +497,37 @@ async function runDualRouter() {
     console.log(`  Captured Peak Amplitude : ${cumulativePeak.toFixed(4)} (${(cumulativePeak * 100).toFixed(1)}% of full scale)`);
     console.log(`  Captured Overall RMS    : ${formatDb(overallDb)}`);
     console.log(`  Default Mute Management : ${endpointMute.enabled ? (endpointMute.originallyMuted ? "Preserved Pre-Muted State" : "Restored Original Unmuted State") : "Disabled (--no-mute)"}`);
+
+    const capSnap = captureTelemetry.getSnapshot();
+    if (capSnap.enabled && capSnap.callbackIntervalMs.count > 0) {
+      console.log(`  Capture Callbacks Interval: avg=${capSnap.callbackIntervalMs.avg} ms (min=${capSnap.callbackIntervalMs.min} ms, max=${capSnap.callbackIntervalMs.max} ms, p95=${capSnap.callbackIntervalMs.p95} ms)`);
+      console.log(`  PCM Frames Converted    : ${capSnap.pcmOutputFrames} (${(capSnap.pcmOutputFrames * 0.02).toFixed(2)}s audio)`);
+    }
+
     console.log("-------------------------------------------------");
     console.log(`  Output 1 ("${diag1.deviceName}", ID: ${diag1.deviceId}):`);
     console.log(`    State                 : ${diag1.state}`);
     console.log(`    Buffers Written       : ${diag1.submittedFrames} (${diag1.audioSecondsPlayed}s audio played)`);
     console.log(`    Buffer Drops (Drop-Old): ${diag1.queue.droppedBuffers}`);
-    console.log(`    Underrun Ticks        : ${diag1.underrunTicks}`);
-    console.log(`    Final Queue Depth     : ${diag1.queue.queuedMs} ms (${diag1.queue.queuedBuffers} buf)`);
+    console.log(`    Empty-Queue Ticks     : ${diag1.underrunTicks}`);
+    console.log(`    Queue Depth (min/avg/max): ${diag1.queue.minQueueMs}ms / ${diag1.queue.avgQueueMs}ms / ${diag1.queue.maxQueueMs}ms (current: ${diag1.queue.queuedMs}ms)`);
+    if (diag1.telemetry && diag1.telemetry.enabled) {
+      const t1 = diag1.telemetry;
+      console.log(`    Pacer Tick Interval   : avg=${t1.pacerIntervalMs.avg} ms (min=${t1.pacerIntervalMs.min} ms, max=${t1.pacerIntervalMs.max} ms, p95=${t1.pacerIntervalMs.p95} ms)`);
+      console.log(`    Native Write Duration : avg=${t1.writeDurationUs.avg} µs (min=${t1.writeDurationUs.min} µs, max=${t1.writeDurationUs.max} µs, p95=${t1.writeDurationUs.p95} µs)`);
+    }
     console.log("-------------------------------------------------");
     console.log(`  Output 2 ("${diag2.deviceName}", ID: ${diag2.deviceId}):`);
     console.log(`    State                 : ${diag2.state}`);
     console.log(`    Buffers Written       : ${diag2.submittedFrames} (${diag2.audioSecondsPlayed}s audio played)`);
     console.log(`    Buffer Drops (Drop-Old): ${diag2.queue.droppedBuffers}`);
-    console.log(`    Underrun Ticks        : ${diag2.underrunTicks}`);
-    console.log(`    Final Queue Depth     : ${diag2.queue.queuedMs} ms (${diag2.queue.queuedBuffers} buf)`);
+    console.log(`    Empty-Queue Ticks     : ${diag2.underrunTicks}`);
+    console.log(`    Queue Depth (min/avg/max): ${diag2.queue.minQueueMs}ms / ${diag2.queue.avgQueueMs}ms / ${diag2.queue.maxQueueMs}ms (current: ${diag2.queue.queuedMs}ms)`);
+    if (diag2.telemetry && diag2.telemetry.enabled) {
+      const t2 = diag2.telemetry;
+      console.log(`    Pacer Tick Interval   : avg=${t2.pacerIntervalMs.avg} ms (min=${t2.pacerIntervalMs.min} ms, max=${t2.pacerIntervalMs.max} ms, p95=${t2.pacerIntervalMs.p95} ms)`);
+      console.log(`    Native Write Duration : avg=${t2.writeDurationUs.avg} µs (min=${t2.writeDurationUs.min} µs, max=${t2.writeDurationUs.max} µs, p95=${t2.writeDurationUs.p95} µs)`);
+    }
     console.log("=================================================\n");
 
     process.exit(0);
@@ -570,6 +603,6 @@ async function runDualRouter() {
 
 runDualRouter().catch((err) => {
   console.error("[FATAL in runDualRouter]:", err.message);
-  endpointMute.restoreSync();
+  endpointMute.restoreAllSync();
   process.exit(1);
 });

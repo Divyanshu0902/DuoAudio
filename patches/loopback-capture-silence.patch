@@ -1,0 +1,37 @@
+--- a/node_modules/loopback-capture/src/platform/windows/LoopbackCapture.cpp
++++ b/node_modules/loopback-capture/src/platform/windows/LoopbackCapture.cpp
+@@ -5,6 +5,7 @@
+ #include <cmath>
+ #include <cstdint>
+ #include <cstring>
++#include <vector>
+ #include <combaseapi.h>
+ #include <audioclientactivationparams.h>
+ 
+@@ -515,10 +516,24 @@ HRESULT CLoopbackCapture::OnAudioSampleRequested()
+       RETURN_IF_FAILED(m_AudioCaptureClient->GetBuffer(&Data, &FramesAvailable, &dwCaptureFlags, &u64DevicePosition, &u64QPCPosition));
+ 
+       // Hand the buffer off to JS via the ThreadSafeFunction
+-      if (m_DeviceState != DeviceState::Stopping && !IsBufferSilent(Data, FramesAvailable, &m_CaptureFormat, -70))
++      if (m_DeviceState != DeviceState::Stopping)
+       {
+          size_t byteCount = FramesAvailable * m_CaptureFormat.nBlockAlign;
+-         EmitAudioData(Data, static_cast<UINT32>(byteCount));
++         bool isSilent = (dwCaptureFlags & AUDCLNT_BUFFERFLAGS_SILENT) != 0;
++         if (!isSilent)
++         {
++            isSilent = IsBufferSilent(Data, FramesAvailable, &m_CaptureFormat, -70);
++         }
++
++         if (isSilent)
++         {
++            std::vector<BYTE> zeroBuffer(byteCount, 0);
++            EmitAudioData(zeroBuffer.data(), static_cast<UINT32>(byteCount));
++         }
++         else
++         {
++            EmitAudioData(Data, static_cast<UINT32>(byteCount));
++         }
+       }
+ 
+       // Release buffer back

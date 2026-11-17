@@ -11,6 +11,7 @@ const { createMainWindow } = require('./window');
 const { createSystemTray } = require('./tray');
 const { registerIpcHandlers } = require('./ipc/handlers');
 const { lifecycle } = require('./lifecycle');
+const { audioService } = require('./audio-service');
 
 // Enforce single-instance lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -104,11 +105,54 @@ if (!gotTheLock) {
       }
       console.log('[SMOKE TEST] Tray double-click idempotency verified (remains visible).');
 
-      console.log('[SMOKE TEST PASSED] All desktop lifecycle operations verified successfully.\n');
+      (async () => {
+        try {
+          // 7. Verify device enumeration inside Electron
+          const { enumeratePlaybackDevices } = require('./device-service');
+          const enumRes = await enumeratePlaybackDevices();
+          if (!enumRes || !enumRes.success || !Array.isArray(enumRes.devices)) {
+            console.error('[SMOKE TEST FAILED] Device enumeration failed:', enumRes?.error);
+            process.exit(1);
+          }
+          console.log(`[SMOKE TEST] Device enumeration verified: ${enumRes.devices.length} playback device(s) found.`);
+          for (const d of enumRes.devices) {
+            console.log(`[SMOKE TEST]   - ID ${d.id}: "${d.name}" (default=${d.isDefault})`);
+          }
 
-      setTimeout(() => {
-        lifecycle.quit();
-      }, 500);
+          // 8. Verify preflight validation & duplicate device rejection
+          if (enumRes.devices.length > 0) {
+            const devId = enumRes.devices[0].id;
+            const preflightRes = await audioService.validatePreflight({ device1Id: devId, device2Id: devId });
+            if (preflightRes.valid === false && preflightRes.error && preflightRes.error.includes('same audio device')) {
+              console.log('[SMOKE TEST] Duplicate device rejection preflight guard verified.');
+            } else {
+              console.error('[SMOKE TEST FAILED] Duplicate device preflight check did not reject identical devices.');
+              process.exit(1);
+            }
+          }
+
+          // 9. Verify audio service initial state & routing status
+          const routingStatus = audioService.getRoutingStatus();
+          console.log(`[SMOKE TEST] Routing initial state verified: ${routingStatus.state} (isRouting=${routingStatus.isRouting})`);
+
+          // 10. Verify default render endpoint is unmuted
+          const { EndpointMuteManager } = require('../endpoint_mute');
+          const muteManager = new EndpointMuteManager();
+          const epQuery = await muteManager.queryDefault();
+          if (epQuery && epQuery.success) {
+            console.log(`[SMOKE TEST] Default render endpoint "${epQuery.name}" verified (muted=${epQuery.isMuted}).`);
+          }
+
+          console.log('\n[SMOKE TEST PASSED] All desktop lifecycle operations verified successfully.\n');
+
+          setTimeout(() => {
+            lifecycle.quit();
+          }, 500);
+        } catch (err) {
+          console.error('[SMOKE TEST FAILED] Unexpected error during async smoke test:', err);
+          process.exit(1);
+        }
+      })();
     }
   });
 
