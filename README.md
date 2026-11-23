@@ -16,36 +16,44 @@
 
 <p align="center">
   <a href="https://github.com/Divyanshu0902/DuoAudio/releases/latest"><b>Download Installer (.exe)</b></a> •
-  <a href="#-key-features">Key Features</a> •
+  <a href="#-desktop-application-interface">App Interface</a> •
+  <a href="#-how-dual-audio-streams-together">How It Works</a> •
   <a href="#-architecture--tech-stack">Architecture</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-building-from-source">Build from Source</a>
+  <a href="#-quick-start">Quick Start</a>
 </p>
 
 ---
 
-### The Problem
+### 🖥️ Desktop Application Interface
 
-Windows natively supports outputting system audio to only **one** default playback device at a time. If two people want to watch a movie on a flight or listen to music together using Bluetooth earbuds, Windows forces them to share a single earbud or wrestle with complex, laggy virtual audio cables.
-
-**DuoAudio** solves this with a lightweight, low-latency desktop utility that captures Windows system audio and duplicates it in real time to two independent output endpoints simultaneously.
+<table>
+  <tr>
+    <td width="55%" valign="top">
+      <h4>Minimalist, Distraction-Free Experience</h4>
+      <p>Windows natively supports outputting system audio to only one playback device at a time. DuoAudio provides a clean, dark-mode desktop interface engineered for speed, simplicity, and zero cognitive load:</p>
+      <ul>
+        <li><b>Zero-Friction Setup:</b> Select your two connected earbuds from the dropdowns and click <b>Start Sharing</b>.</li>
+        <li><b>Independent Volume Controls:</b> Dedicated real-time sliders allow each listener to set their own comfortable listening level.</li>
+        <li><b>System Tray Integration:</b> Minimizes cleanly to the Windows system tray to run quietly in the background without taskbar clutter.</li>
+        <li><b>Instant Visual Feedback:</b> Clear visual indicators for active endpoints, connection status, and speaker muting state.</li>
+      </ul>
+    </td>
+    <td width="45%" align="center" valign="middle">
+      <img src="assets/screenshot-main.png" alt="DuoAudio Desktop App Interface" width="100%">
+    </td>
+  </tr>
+</table>
 
 ---
 
-### ✨ Key Features
+### 🎧 How Dual Audio Streams Together
 
-- 🎧 **Simultaneous Dual Output:** Stream audio from any app (YouTube, Spotify, VLC, games, browser) to two separate Bluetooth earbuds or headphones with low latency.
+- ⚡ **Simultaneous Dual Output:** Stream audio from any app (YouTube, Spotify, VLC, games, browser) to two separate Bluetooth earbuds or headphones with low latency.
 - 🎯 **Zero-Configuration Routing:** No manual Windows Sound settings tinkering. DuoAudio automatically detects your devices, sets up routing in the background, and restores your default headphones when you stop.
 - 🤫 **Silent Room Protection:** Automatically silences your laptop speakers during streaming so audio plays strictly inside both listeners' earbuds.
 - 🎚️ **Independent Volume Control:** Adjust volume levels for each listener independently right from the app with smooth software gain.
 - ⚡ **Low Latency & High Fidelity:** Direct 16-bit / 48 kHz linear PCM streaming built on Windows Core Audio (WASAPI).
-- 🌙 **Minimalist Dark UI:** Compact, distraction-free interface designed to run quietly in your Windows system tray.
-
----
-
-<p align="center">
-  <img src="assets/screenshot-main.png" alt="DuoAudio Desktop App Interface" width="500px">
-</p>
+- 🔒 **100% Offline & Private:** Zero telemetry, no background network calls, completely open source under MIT.
 
 ---
 
